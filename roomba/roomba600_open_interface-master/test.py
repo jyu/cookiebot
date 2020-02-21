@@ -10,7 +10,7 @@ ser = serial.Serial("COM5", baudrate=115200, timeout=0.5)
 # Send "Start" Opcode to start Open Interface, Roomba in Passive Mode
 ser.write(bytes([128]))
 # Send "Safe Mode" Opcode to enable Roomba to respond to commands
-ser.write(bytes([132])) #132:full 131:safe
+ser.write(bytes([131])) #132:full 131:safe
 # Start Brushes
 # ser.write(bytes([144,100,100,100]))
 # time.sleep(1)
