@@ -19,6 +19,8 @@ y_arr = np.array([0.0])
 tmp = 0
 prev_encoderL = prev_encoderR = 0
 
+ser.write(bytes([148, 2, 19, 20])) # request data packet
+
 while True:
     #ser.write(bytes([132]))
     if (keyboard.is_pressed('up')):
@@ -38,6 +40,7 @@ while True:
         ser.write(bytes([137, 0, 0, 0, 0]))
         break
 
+    """
     ser.write(bytes([142, 19]))
     ser.in_waiting
     dist_b = ser.read(2)
@@ -47,6 +50,33 @@ while True:
     ser.in_waiting
     ang_b = ser.read(2)
     ang -= int.from_bytes(ang_b, byteorder='big', signed=True)
+    """
+    
+    ser.in_waiting
+    found = False
+    while (found == False):
+        data = ser.read(1)
+        data = int.from_bytes(data, byteorder='big', signed=False)
+        if data == 19:
+            data = ser.read(1)
+            data = int.from_bytes(data, byteorder='big', signed=False)
+            # print("2",hex(data))
+            if data == 6:
+                found = True
+
+    if found:
+        # print("found")
+        ser.read(1)
+        pdata1 = ser.read(2)
+        dist = int.from_bytes(pdata1, byteorder='big', signed=True)
+        ser.read(1)
+        pdata2 = ser.read(2)
+        ang -= int.from_bytes(pdata2, byteorder='big', signed=True)
+        ser.read(1)
+        # print("dist:", pdata1, " ang:", pdata2)
+
+    found = False
+    ser.reset_input_buffer()
 
     # ser.write(bytes([142, 43]))
     # ser.in_waiting
@@ -87,7 +117,7 @@ while True:
         x_arr = np.append(x_arr,[x])
         y_arr = np.append(y_arr,[y])
     tmp += 1
-print(x_arr, y_arr)
+# print(x_arr, y_arr)
 data = {'x_data': x_arr, 'y_data': y_arr}
 plt.plot('x_data','y_data',data=data)
 plt.show()

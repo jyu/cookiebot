@@ -10,7 +10,8 @@ ser = serial.Serial("COM5", baudrate=115200, timeout=0.5)
 # Send "Start" Opcode to start Open Interface, Roomba in Passive Mode
 ser.write(bytes([128]))
 # Send "Safe Mode" Opcode to enable Roomba to respond to commands
-ser.write(bytes([131])) #132:full 131:safe
+# ser.write(bytes([131])) #132:full 131:safe
+
 # Start Brushes
 # ser.write(bytes([144,100,100,100]))
 # time.sleep(1)
@@ -40,7 +41,7 @@ ser.write(bytes([131])) #132:full 131:safe
 #     except:
 #         ser.write(bytes([137, 0, 0, 0, 0]))
 #         break
-
+"""
 while True:
     if (keyboard.is_pressed('up')):
         ser.write(bytes([137, 0, 100, 0, 0]))
@@ -55,6 +56,7 @@ while True:
     elif (keyboard.is_pressed('q')):
         ser.write(bytes([137, 0, 0, 0, 0]))
         break
+
     # ser.write(bytes([137, 0, 0, 0, 0]))
 
 # Input Commands (Read State / Sensors)
@@ -81,6 +83,49 @@ print(res_v)
 # current = ser.read(2)
 # res = int.from_bytes(current, byteorder='big', signed=True)
 # print(res)
+
+while True:
+    ser.write(bytes([142, 52]))
+    ser.in_waiting
+    infraL_b = ser.read(1)
+    infraL = int.from_bytes(infraL_b, byteorder='big', signed=False)
+    ser.write(bytes([142, 53]))
+    ser.in_waiting
+    infraR_b = ser.read(1)
+    infraR = int.from_bytes(infraR_b, byteorder='big', signed=False)
+    if infraL != 0 or infraR != 0:
+        print("l:", infraL, " r:", infraR)
+"""
+ser.write(bytes([148, 2, 19, 20]))
+while True:
+    ser.in_waiting
+    data = ser.read(2)
+    data = int.from_bytes(data, byteorder='big', signed=False)
+    if data == 4870:
+        ser.read(1)
+        pdata1 = ser.read(2)
+        pdata1 = int.from_bytes(pdata1, byteorder='big', signed=True)
+        ser.read(1)
+        pdata2 = ser.read(2)
+        pdata2 = int.from_bytes(pdata2, byteorder='big', signed=True)
+        print("dist:", pdata1, " ang:", pdata2)
+    """
+    header = ser.read(1)
+    gap = ser.read(1)
+    pid1 = ser.read(1)
+    pdata1 = ser.read(2)
+    pid2 = ser.read(1)
+    pdata2 = ser.read(2)
+    checksum = ser.read(1)
+
+    header = int.from_bytes(header, byteorder='big', signed=False)
+    pid1 = int.from_bytes(pid1, byteorder='big', signed=False)
+    pdata1 = int.from_bytes(pdata1, byteorder='big', signed=True)
+    pid2 = int.from_bytes(pid2, byteorder='big', signed=False)
+    pdata2 = int.from_bytes(pdata2, byteorder='big', signed=True)
+    """
+    # print("data:", hex(data))
+    # print("dist:", pdata1, " ang:", pdata2)
 
 # ser.write(bytes([173])) #stop
 ser.write(bytes([128])) #return to passive mode

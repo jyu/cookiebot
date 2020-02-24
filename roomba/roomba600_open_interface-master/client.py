@@ -9,7 +9,7 @@ from roomba600_open_interface.packets.packets import OpenInterfaceModeSensorPack
 
 import time
 
-roombaConnection = RoombaSerialConnection("COM3")
+roombaConnection = RoombaSerialConnection("COM5")
 
 invoker = Invoker()
 
