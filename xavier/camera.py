@@ -19,9 +19,10 @@ print("use display", display)
 
 if use_server:
     # Use websockets
-    ws = create_connection("ws://localhost:5000/")
+    ws = create_connection("ws://localhost:5000/gestures")
 
 # Location of OpenPose python binaries
+#openpose_path = "usr/lib/openpose"
 openpose_path = "../../openpose"
 openpose_python_path = openpose_path + "/build/python"
 sys.path.append(openpose_python_path)
@@ -182,6 +183,7 @@ while success:
                 last_command = command
                 # Communicate to server
                 if use_server:
+                    print("sending command", command)
                     ws.send(command)
                 print("new command", command)
 
