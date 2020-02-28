@@ -40,15 +40,24 @@ opWrapper = op.WrapperPython()
 opWrapper.configure(params)
 opWrapper.start()
 
+opWrapper2 = op.WrapperPython()
+opWrapper2.configure(params)
+opWrapper2.start()
+
+ops = [opWrapper, opWrapper2]
+
 # Start reading camera feed
-cap = cv2.VideoCapture("/dev/video0", cv2.CAP_V4L)
-#cap = cv2.VideoCapture("/dev/video0", cv2.CAP_GSTREAMER)
+cameras = 2
+caps = []
+for i in range(cameras):
+    cam_name = "/dev/video" + str(i)
+    caps.append(cv2.VideoCapture(cam_name, cv2.CAP_V4L))
 
 if display:
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
-    cv2.resizeWindow('image', 900, 1000)
+    cv2.resizeWindow('image', 1800, 1000)
 
-success, img = cap.read()
+success, img = caps[0].read()
 print(img.shape)
 
 # sliding window for timing data
@@ -158,13 +167,25 @@ def keypointsToCommand(keypoints):
 success = True
 while success:
     start_time = time.time()
-    success, img = cap.read()
-    datum = op.Datum()
-    datum.cvInputData = img
-    opWrapper.emplaceAndPop([datum])
-    img = datum.cvOutputData
-    img = np.array(img, dtype=np.uint8)
-    command = keypointsToCommand(datum.poseKeypoints)
+    
+    imgs = []
+    keypoints = []
+    for i in range(cameras):
+        cap = caps[i]
+        opWrapper = ops[i]
+        success, img = cap.read()
+        if not success:
+            print("Cam", i, "failed to read")
+
+        datum = op.Datum()
+        datum.cvInputData = img
+        opWrapper.emplaceAndPop([datum])
+        img = datum.cvOutputData
+        img = np.array(img, dtype=np.uint8)
+        keypoints.append(datum.poseKeypoints)
+        imgs.append(img)
+
+    command = keypointsToCommand(keypoints[0])
 
     # We only want to change teleop command if we saw it 3 frames in a row
     if command != last_command:
@@ -204,6 +225,7 @@ while success:
         cv2.putText(img, str(fps) + " FPS", (20, 20), font, .5, (255, 255, 255), 1, cv2.LINE_AA)
         cv2.putText(img, str(ms) + " ms per frame", (20, 50), font, .5, (255, 255, 255), 1, cv2.LINE_AA)
         cv2.putText(img, str(command), (20, 100), font, .5, (0, 0, 0), 1, cv2.LINE_AA)
-
-        cv2.imshow('image',img)
+        
+        imv = cv2.hconcat(imgs)
+        cv2.imshow('image',imv)
         cv2.waitKey(1)
