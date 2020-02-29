@@ -5,6 +5,8 @@ import threading
 import math
 import matplotlib.pyplot as plt
 import numpy as np
+import asyncio
+import websockets
 
 ser = serial.Serial("COM5", baudrate=115200, timeout=0.5)
 
@@ -20,6 +22,7 @@ tmp = 0
 prev_encoderL = prev_encoderR = 0
 
 ser.write(bytes([148, 2, 19, 20])) # request data packet
+
 
 while True:
     #ser.write(bytes([132]))
@@ -123,3 +126,29 @@ plt.plot('x_data','y_data',data=data)
 plt.show()
 
 ser.write(bytes([128])) #return to passive mode
+
+def XY_coordinate(dist, ang, x, y):
+    while True:
+        ser.in_waiting
+        found = False
+        while (found == False):
+            data = ser.read(1)
+            data = int.from_bytes(data, byteorder='big', signed=False)
+            if data == 19:
+                data = ser.read(1)
+                data = int.from_bytes(data, byteorder='big', signed=False)
+                # print("2",hex(data))
+                if data == 6:
+                    found = True
+
+        if found:
+            # print("found")
+            ser.read(1)
+            pdata1 = ser.read(2)
+            dist = int.from_bytes(pdata1, byteorder='big', signed=True)
+            ser.read(1)
+            pdata2 = ser.read(2)
+            ang -= int.from_bytes(pdata2, byteorder='big', signed=True)
+            ser.read(1)
+            # print("dist:", pdata1, " ang:", pdata2)
+        
