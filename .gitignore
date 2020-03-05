@@ -1,3 +1,8 @@
 .*.sw*
 */out
 */node_modules
+*/__pycache__
+xavier/data
+xavier/teleop_data
+xavier/models
+xavier/prod_models
