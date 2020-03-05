@@ -110,13 +110,13 @@ def drive_fn(stat):
     ser = stat.ser
     while True:
         if (keyboard.is_pressed('up')):
-            ser.write(bytes([137, 0, 100, 0, 0]))
+            ser.write(bytes([137, 0, 50, 0, 0]))
         elif (keyboard.is_pressed('down')):
-            ser.write(bytes([137, 255, 156, 0, 0]))
+            ser.write(bytes([137, 255, 206, 0, 0]))
         elif (keyboard.is_pressed('right')):
-            ser.write(bytes([137, 0, 100, 255, 255]))
+            ser.write(bytes([137, 0, 50, 255, 255]))
         elif (keyboard.is_pressed('left')):
-            ser.write(bytes([137, 0, 100, 0, 1]))
+            ser.write(bytes([137, 0, 50, 0, 1]))
         elif (keyboard.is_pressed('space')):
             ser.write(bytes([137, 0, 0, 0, 0]))
         elif (keyboard.is_pressed('d')):
@@ -140,11 +140,15 @@ def mapping_fn(stat):
     # complete = False
     # while complete == False:
     #     while 
-    # print("map thread")
+    print("map thread begun")
+    start_x = stat.x
+    start_y = stat.y
     right = frontRight = centerRight = centerLeft = frontLeft = left = 0
     leftBump = rightBump = 0
+    edge_complete = False
+    ser.write(bytes([137, 0, 100, 0, 2])) # Steer left / Full speed
     while True:
-        print() #why is this necessary wtf
+        # print() #why is this necessary wtf
         lightBumper = stat.lightBumper
         physBumper = stat.physBumper
         if lightBumper != "":
@@ -157,14 +161,39 @@ def mapping_fn(stat):
         if physBumper != "":
             rightBump = int(physBumper[3])
             leftBump = int(physBumper[2])
+
+        if edge_complete == False:
+            # Reduce speed
+            if frontLeft or frontRight:
+                print("there's something ahead")
+                ser.write(bytes([137, 0, 50, 0, 2]))
+            else: 
+                ser.write(bytes([137, 0, 100, 0, 2]))
+        else:
+            # Initiate moving back and forth
+
         if rightBump == 1:
             print("right bumped")
             # ser.write(bytes([137, 0, 0, 0, 0]))
-            # ser.write(bytes([137, 255, 156, 0, 0]))
-            # time.sleep(0.5)
-            # ser.write(bytes([137, 0, 100, 0, 1]))
-            # time.sleep(0.5)
+            ser.write(bytes([137, 255, 156, 0, 0]))
+            time.sleep(0.3)
+            ser.write(bytes([137, 0, 100, 0, 1]))
+            time.sleep(0.3)
+            ser.write(bytes([137, 0, 0, 0, 0]))
+        elif leftBump == 1:
+            print("left bumped")
             # ser.write(bytes([137, 0, 0, 0, 0]))
+            ser.write(bytes([137, 255, 156, 0, 0]))
+            time.sleep(0.3)
+            ser.write(bytes([137, 0, 100, 255, 255]))
+            time.sleep(0.3)
+            ser.write(bytes([137, 0, 0, 0, 0]))
+
+        if (stat.x - start_x) + (stat.y - start_y) < 10:
+            edge_complete = True
+
+        
+        print(lightBumper, physBumper)
         # if leftBump == 1:
             # print("right bumped")
 
@@ -184,11 +213,11 @@ def main():
     robot.state = "passive"
     # Send "Safe Mode" Opcode to enable Roomba to respond to commands
     ser.write(bytes([131])) #132:full 131:safe
-    ser.write(bytes([148, 4, 19, 20, 45, 7]))
+    ser.write(bytes([148, 4, 19, 20, 45, 7])) # Initiate streaming
     robot.state = "safe"
     t_odometry.start()
     t_drive.start()
-    t_map.start()
+    # t_map.start()
     # t_wake.start()
     while True:
         # print(ser.in_waiting)
@@ -203,6 +232,9 @@ def main():
             plt.scatter('x_data','y_data',data=data)
             # print(data)
             break
+        elif keyboard.is_pressed("m") and (t_map.is_alive() == False):
+            print("map thread button pressed")
+            t_map.start()
     plt.show()
 
 if __name__ == "__main__":
