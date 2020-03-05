@@ -5,15 +5,19 @@ import numpy as np
 import time
 from websocket import create_connection
 import argparse
+import os
 
 # Parse arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-s', action="store_true") # Use server
-parser.add_argument('-d', action="store_true") # Use display
+parser.add_argument('-s', action="store_true")
+parser.add_argument('-d', action="store_true")
+parser.add_argument('-mode')
 
 args = parser.parse_args()
 use_server = args.s
 display = args.d
+mode = args.mode
+print("COLLECTING DATA FOR MODE", mode)
 
 if use_server:
     # Use websockets
@@ -76,6 +80,26 @@ def isConfidentAboutArm(res, confidence_threshold, side):
             res["l_shoulder"][conf] > confidence_threshold
         )
     return False
+
+def getKeyPointsFeat(keypoints):
+    if len(keypoints.shape) == 0:
+        return None
+    person = keypoints[0]
+    x = 0
+    y = 1
+    chest = person[1]
+
+    # Part indicies
+    # R shoulder, R elbow, R wrist, L shoulder, L elbow, L wrist
+    # Midhip, RHip, LHip, Reye, LEye
+    parts = [2,3,4,5,6,7,8,9,12,15,16]
+    
+    feat = []
+    for p in parts:
+        feat.append(chest[x] - person[p][x]) 
+        feat.append(chest[y] - person[p][y])
+
+    return np.array(feat)
 
 def keypointsToCommand(keypoints):
     if len(keypoints.shape) == 0:
@@ -153,8 +177,11 @@ def keypointsToCommand(keypoints):
         return teleop_command
     return "none"
 
+frames = 0
 success = True
+written = 0
 while success:
+    frames += 1
     start_time = time.time()
     success, img = cap.read()
     datum = op.Datum()
@@ -162,6 +189,7 @@ while success:
     opWrapper.emplaceAndPop([datum])
     img = datum.cvOutputData
     img = np.array(img, dtype=np.uint8)
+    keypoints = datum.poseKeypoints
     command = keypointsToCommand(datum.poseKeypoints)
 
     # We only want to change teleop command if we saw it 3 frames in a row
@@ -204,4 +232,66 @@ while success:
         cv2.putText(img, str(command), (20, 100), font, .5, (0, 0, 0), 1, cv2.LINE_AA)
 
         cv2.imshow('image',img)
-        cv2.waitKey(1)
+        key = cv2.waitKey(1)
+
+        # Auto method
+
+        # Save as feat only on 5th frame
+        if frames % 5 != 0:
+            continue
+
+        # Must follow teleop heuristic
+        if not "teleop" in command:
+            continue
+
+        feat = getKeyPointsFeat(keypoints)
+
+        if feat is None:
+            continue
+
+        print(feat)
+        print(feat.shape)
+        folder = "teleop_data"
+        f = mode
+        fwrite = open(folder + "/" + f, 'a')
+        line = str(feat[0])
+        for m in range(1, feat.shape[0]):
+            line += ";" + str(feat[m])
+        line += "\n"
+        fwrite.write(line)
+        fwrite.close()
+        written += 1
+        print("written", written)
+
+        # Key method MANUAL
+        """
+        if key != -1:
+            # Must follow teleop heuristic
+            if not "teleop" in command:
+                continue
+
+            feat = getKeyPointsFeat(keypoints)
+
+            if feat is None:
+                continue
+
+            if not key in [81, 82, 83]:
+                continue
+
+            print(feat)
+            print(feat.shape)
+            folder = "straight"
+            if key == 81:
+                f = "left"  
+            if key == 82:
+                f = "straight"
+            if key == 83:
+                f = "right"
+            fwrite = open(folder + "/" + f)
+            line = str(feat[0])
+            for m in range(1, feat.shape[1]):
+                line += ";" + str(feat[m])
+            fwrite.write(line)
+            fwrite.close()
+        """
+            
