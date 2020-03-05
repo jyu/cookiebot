@@ -7,6 +7,7 @@ from websocket import create_connection
 import argparse
 import pickle
 from sklearn import preprocessing
+from get_gesture_data import getKeyPointsFeat
 
 # Parse arguments
 parser = argparse.ArgumentParser()
@@ -83,26 +84,6 @@ def isConfidentAboutArm(res, confidence_threshold, side):
             res["l_shoulder"][conf] > confidence_threshold
         )
     return False
-
-def getKeyPointsFeat(keypoints):
-    if len(keypoints.shape) == 0:
-        return None
-    person = keypoints[0]
-    x = 0
-    y = 1
-    chest = person[1]
-
-    # Part indicies
-    # R shoulder, R elbow, R wrist, L shoulder, L elbow, L wrist
-    # Midhip, RHip, LHip, Reye, LEye
-    parts = [2,3,4,5,6,7,8,9,12,15,16]
-    
-    feat = []
-    for p in parts:
-        feat.append(chest[x] - person[p][x]) 
-        feat.append(chest[y] - person[p][y])
-
-    return np.array(feat)
 
 def keypointsToCommand(keypoints):
     if len(keypoints.shape) == 0:
