@@ -5,26 +5,23 @@ import numpy as np
 import time
 from websocket import create_connection
 import argparse
-import pickle
-from sklearn import preprocessing
+import os
 
 # Parse arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-s', action="store_true") # Use server
-parser.add_argument('-d', action="store_true") # Use display
-parser.add_argument('-m', action="store_true") # Use model for teleop
+parser.add_argument('-s', action="store_true")
+parser.add_argument('-d', action="store_true")
+parser.add_argument('-mode')
 
 args = parser.parse_args()
 use_server = args.s
 display = args.d
-use_model = args.m
+mode = args.mode
+print("COLLECTING DATA FOR MODE", mode)
 
 if use_server:
     # Use websockets
     ws = create_connection("ws://localhost:5000/gestures")
-
-# Location of teleop SVM
-teleop_svm = pickle.load(open("prod_models/teleop.svm", "rb"))
 
 # Location of OpenPose python binaries
 #openpose_path = "usr/lib/openpose"
@@ -106,7 +103,7 @@ def getKeyPointsFeat(keypoints):
 
 def keypointsToCommand(keypoints):
     if len(keypoints.shape) == 0:
-        return ["none"]
+        return "none"
     person = keypoints[0]
     # For getting the index of the parts we want
     #poseModel = op.PoseModel.BODY_25
@@ -125,6 +122,7 @@ def keypointsToCommand(keypoints):
         "l_wrist": person[7],
     }
     
+    #print(res)
     right_hand_raised = False
     left_hand_raised = False
     confidence_threshold = 0.1
@@ -150,16 +148,7 @@ def keypointsToCommand(keypoints):
         abs(res["r_wrist"][y] - res["r_elbow"][y]) < delta_tolerance * 2):
 
         teleop_mode = True
-
-        # MODEL METHOD
-        feat = getKeyPointsFeat(keypoints)
-        feat = preprocessing.scale(feat)
-        feat = feat.reshape(1, -1)
-        svm_res = teleop_svm.predict(feat)
-        commands = ["teleop_left", "teleop_straight", "teleop_right"]
-        model_teleop_command = commands[svm_res[0]]
-
-        # NO MODEL METHOD
+        
         # Check flip, user turned around
         flip = False
         if res["r_shoulder"][x] - res["l_shoulder"][x] > 0:
@@ -176,24 +165,23 @@ def keypointsToCommand(keypoints):
                 teleop_command = "teleop_right"
         else:
             teleop_command = "teleop_straight"
-        
-        # Only use the model when we are told to
-        #if use_model:
-        #    teleop_command = model_teleop_command
 
         
     if right_hand_raised and left_hand_raised:
-        return ["stop"]
+        return "stop"
     if right_hand_raised:
-        return ["to_me"]
+        return "to_me"
     if left_hand_raised:
-        return ["go_home"]
+        return "go_home"
     if teleop_mode:
-        return [teleop_command, model_teleop_command]
-    return ["none"]
+        return teleop_command
+    return "none"
 
+frames = 0
 success = True
+written = 0
 while success:
+    frames += 1
     start_time = time.time()
     success, img = cap.read()
     datum = op.Datum()
@@ -201,8 +189,8 @@ while success:
     opWrapper.emplaceAndPop([datum])
     img = datum.cvOutputData
     img = np.array(img, dtype=np.uint8)
-    commands = keypointsToCommand(datum.poseKeypoints)
-    command = commands[0]
+    keypoints = datum.poseKeypoints
+    command = keypointsToCommand(datum.poseKeypoints)
 
     # We only want to change teleop command if we saw it 3 frames in a row
     if command != last_command:
@@ -241,9 +229,69 @@ while success:
         font = cv2.FONT_HERSHEY_SIMPLEX
         cv2.putText(img, str(fps) + " FPS", (20, 20), font, .5, (255, 255, 255), 1, cv2.LINE_AA)
         cv2.putText(img, str(ms) + " ms per frame", (20, 50), font, .5, (255, 255, 255), 1, cv2.LINE_AA)
-        cv2.putText(img, "Heuristics: " + str(command), (20, 100), font, .5, (0, 0, 0), 1, cv2.LINE_AA)
-        if len(commands) > 1:
-            cv2.putText(img, "Model: " + str(commands[1]), (20, 150), font, .5, (0, 0, 0), 1, cv2.LINE_AA)
+        cv2.putText(img, str(command), (20, 100), font, .5, (0, 0, 0), 1, cv2.LINE_AA)
 
         cv2.imshow('image',img)
-        cv2.waitKey(1)
+        key = cv2.waitKey(1)
+
+        # Auto method
+
+        # Save as feat only on 5th frame
+        if frames % 5 != 0:
+            continue
+
+        # Must follow teleop heuristic
+        if not "teleop" in command:
+            continue
+
+        feat = getKeyPointsFeat(keypoints)
+
+        if feat is None:
+            continue
+
+        print(feat)
+        print(feat.shape)
+        folder = "teleop_data"
+        f = mode
+        fwrite = open(folder + "/" + f, 'a')
+        line = str(feat[0])
+        for m in range(1, feat.shape[0]):
+            line += ";" + str(feat[m])
+        line += "\n"
+        fwrite.write(line)
+        fwrite.close()
+        written += 1
+        print("written", written)
+
+        # Key method MANUAL
+        """
+        if key != -1:
+            # Must follow teleop heuristic
+            if not "teleop" in command:
+                continue
+
+            feat = getKeyPointsFeat(keypoints)
+
+            if feat is None:
+                continue
+
+            if not key in [81, 82, 83]:
+                continue
+
+            print(feat)
+            print(feat.shape)
+            folder = "straight"
+            if key == 81:
+                f = "left"  
+            if key == 82:
+                f = "straight"
+            if key == 83:
+                f = "right"
+            fwrite = open(folder + "/" + f)
+            line = str(feat[0])
+            for m in range(1, feat.shape[1]):
+                line += ";" + str(feat[m])
+            fwrite.write(line)
+            fwrite.close()
+        """
+            
