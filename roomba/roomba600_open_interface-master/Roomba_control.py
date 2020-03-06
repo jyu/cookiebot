@@ -83,7 +83,7 @@ def odometry_fn(stat):
             dist = (distL + distR)/2.0
             if abs(dist) > 1000:
                 ser.write(bytes([137, 0, 0, 0, 0]))
-                print("fucked up value received")
+                print("fucked up value received") 
                 ser.reset_output_buffer()
                 ser.reset_input_buffer()
             else:
@@ -215,7 +215,8 @@ def mapping_fn(stat):
                 time.sleep(2)
                 start_x = stat.x
                 start_y = stat.y
-                left_origin = False
+                left_origin = False # Comment out this
+                # break # and uncomment this for edge following only
             if (int)(stat.lightBumper[1]) == 1 or (int)(stat.lightBumper[2]) == 1:
                 ser.write(bytes([137, 0, 100, 0, 1]))
                 while (int)(stat.lightBumper[1]) == 1 or (int)(stat.lightBumper[2]) == 1:
