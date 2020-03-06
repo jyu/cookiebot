@@ -26,6 +26,10 @@ class Robot_stat:
         self.y = y
         self.dist = dist
         self.ang = ang
+        if (self.ang < 0):
+            self.ang = (2*math.pi) - self.ang
+        if (self.ang > 2*math.pi):
+            self.ang = self.ang - (2*math.pi)
         self.x_arr = np.append(self.x_arr,[x])
         self.y_arr = np.append(self.y_arr,[y])
         self.lightBumper = (bin(lightBumper)[2:]).zfill(6)
@@ -36,16 +40,16 @@ class Robot_stat:
 
 def odometry_fn(stat):
     ser = stat.ser
-    
+    dist = 0
+    ang = 0
+    x = 0
+    y = 0
+    prev_encL = None
+    prev_encR = None
     while True:
         # ser.write(bytes([150, 1]))
         data = None
         pdata1 = pdata2 = pdata3 = pdata4 = 0
-        dist = stat.dist
-        ang = stat.ang
-        x = stat.x
-        y = stat.y
-
         ser.in_waiting
         found = False
         while (found == False):
@@ -54,69 +58,56 @@ def odometry_fn(stat):
             if data == 19: # Header for data packet
                 data = ser.read(1)
                 data = int.from_bytes(data, byteorder='big', signed=False)
-                if data == 10: # Header for distance data within the packet
+                if data == 10: # N-byte between header and checksum
                     found = True
         if found:
             ser.read(1)
             pdata1 = ser.read(2)
-            dist = int.from_bytes(pdata1, byteorder='big', signed=True)
+            encoderL = int.from_bytes(pdata1, byteorder='big', signed=True)
             ser.read(1)
             pdata2 = ser.read(2)
-            ang -= int.from_bytes(pdata2, byteorder='big', signed=True)
+            encoderR = int.from_bytes(pdata2, byteorder='big', signed=True)
             ser.read(1)
             pdata3 = ser.read(1)
             lightBumper = int.from_bytes(pdata3, byteorder='big', signed=False)
             ser.read(1)
             pdata4 = ser.read(1)
             physBumper = int.from_bytes(pdata4, byteorder='big', signed=False)
-            # print(physBumper)
-            # ser.read(1)
-            # print("dist:", pdata1, " ang:", pdata2)
-            # ser.write(bytes([150, 0]))
-        """
-        if found and ser.in_waiting >= 10:
-            data = ser.read(10)
-            ser.write(bytes([150, 0]))
-            print(data)
-        """
 
-        x += dist*math.sin(math.radians(ang))
-        y += dist*math.cos(math.radians(ang))
+        if prev_encL is None:
+            prev_encL = encoderL
+            prev_encR = encoderR
+        else:
+            distL = (encoderL - prev_encL)*math.pi*72.0/508.8
+            distR = (encoderR - prev_encR)*math.pi*72.0/508.8
+            dist = (distL + distR)/2.0
+            if abs(dist) > 1000:
+                ser.write(bytes([137, 0, 0, 0, 0]))
+                print("fucked up value received")
+                ser.reset_output_buffer()
+                ser.reset_input_buffer()
+            else:
+                ang += (distR - distL)/235.0
+                prev_encL = encoderL
+                prev_encR = encoderR
 
-        stat.update(x, y, dist, ang, lightBumper, physBumper)
-        # stat.print_stat()
-        
+                x -= dist*math.sin(ang)
+                y += dist*math.cos(ang)
 
-def odometry_fn2(stat):
-    ser = stat.ser
-    while True:
-        ang = stat.ang
-        x = stat.x
-        y = stat.y
-        ser.write(bytes([149, 4, 19, 20, 45, 7]))
-        ser.in_waiting
-        dist = int.from_bytes(ser.read(2), byteorder='big', signed=True)
-        ang -= int.from_bytes(ser.read(2), byteorder='big', signed=True)
-        lightBumper = int.from_bytes(ser.read(1), byteorder='big', signed=False)
-        physBumper = int.from_bytes(ser.read(1), byteorder='big', signed=False)
-
-        x += dist*math.sin(math.radians(ang))
-        y += dist*math.cos(math.radians(ang))
-
-        stat.update(x, y, dist, ang, lightBumper, physBumper)
+                stat.update(x, y, dist, ang, lightBumper, physBumper)
         # stat.print_stat()
 
 def drive_fn(stat):
     ser = stat.ser
     while True:
         if (keyboard.is_pressed('up')):
-            ser.write(bytes([137, 0, 50, 0, 0]))
+            ser.write(bytes([137, 0, 100, 0, 0]))
         elif (keyboard.is_pressed('down')):
-            ser.write(bytes([137, 255, 206, 0, 0]))
+            ser.write(bytes([137, 255, 156, 0, 0]))
         elif (keyboard.is_pressed('right')):
-            ser.write(bytes([137, 0, 50, 255, 255]))
+            ser.write(bytes([137, 0, 100, 255, 255]))
         elif (keyboard.is_pressed('left')):
-            ser.write(bytes([137, 0, 50, 0, 1]))
+            ser.write(bytes([137, 0, 100, 0, 1]))
         elif (keyboard.is_pressed('space')):
             ser.write(bytes([137, 0, 0, 0, 0]))
         elif (keyboard.is_pressed('d')):
@@ -137,69 +128,227 @@ def wake_fn(stat):
 
 def mapping_fn(stat):
     ser = stat.ser
-    # complete = False
-    # while complete == False:
-    #     while 
     print("map thread begun")
-    start_x = stat.x
-    start_y = stat.y
-    right = frontRight = centerRight = centerLeft = frontLeft = left = 0
-    leftBump = rightBump = 0
-    edge_complete = False
-    ser.write(bytes([137, 0, 100, 0, 2])) # Steer left / Full speed
-    while True:
-        # print() #why is this necessary wtf
-        lightBumper = stat.lightBumper
-        physBumper = stat.physBumper
-        if lightBumper != "":
-            right = int(lightBumper[0])
-            frontRight = int(lightBumper[1])
-            centerRight = int(lightBumper[2])
-            centerLeft = int(lightBumper[3])
-            frontLeft = int(lightBumper[4])
-            left = int(lightBumper[5])
-        if physBumper != "":
-            rightBump = int(physBumper[3])
-            leftBump = int(physBumper[2])
+    start_x = None
+    start_y = None
+    # right = frontRight = centerRight = centerLeft = frontLeft = left = 0
+    # leftBump = rightBump = 0
+    steer_left = True
+    left_origin = False
+    done = False
+    edge_done = False
+    first_wall = False
+    on_right = True
+    epsilon = 0.08
+    origin_err_goal = 150
+    ser.write(bytes([137, 0, 100, 4, 0])) # Steer left / Full speed
+    # ser.write(bytes([137, 0, 100, 0, 0]))
 
-        if edge_complete == False:
-            # Reduce speed
-            if frontLeft or frontRight:
-                print("there's something ahead")
-                ser.write(bytes([137, 0, 50, 0, 2]))
-            else: 
-                ser.write(bytes([137, 0, 100, 0, 2]))
+    #For debug
+    # start_x = stat.x
+    # start_y = stat.y
+    # edge_done = True
+
+    while done is False:
+        # First edge following with steering left
+        if steer_left is True and edge_done is False:
+            if start_x != None:
+                err = abs(start_x - stat.x) + abs(start_y - stat.y)
+                print("err:", err)
+                if left_origin == False:
+                    if err > origin_err_goal:
+                        left_origin = True
+                if err < origin_err_goal - 50 and left_origin:
+                    print("returned to origin")
+                    ser.write(bytes([137, 0, 0, 0, 0]))
+                    ser.write(bytes([137, 0, 100, 0, 1]))
+                    time.sleep(3)
+                    steer_left = False
+                    ser.write(bytes([137, 0, 0, 0, 0]))
+                    time.sleep(2)
+                    left_origin = False
+                    start_x = stat.x
+                    start_y = stat.y
+
+            if (int)(stat.lightBumper[3]) == 1 or (int)(stat.lightBumper[4]) == 1:
+                ser.write(bytes([137, 0, 100, 255, 255]))
+                while (int)(stat.lightBumper[3]) == 1 or (int)(stat.lightBumper[4]) == 1:
+                    print("turning")
+                if start_x == None:
+                    start_x = stat.x
+                    start_y = stat.y
+                ser.write(bytes([137, 0, 0, 0, 0])) # Is this necessary
+            else:
+                ser.write(bytes([137, 0, 100, 4, 0]))
+                if int(stat.physBumper[3]) == 1:
+                    if start_x == None:
+                        start_x = stat.x
+                        start_y = stat.y
+                    print("right bumped")
+                    ser.write(bytes([137, 255, 156, 0, 0]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 255, 255]))
+                    time.sleep(1)
+                    ser.write(bytes([137, 0, 0, 0, 0]))
+                elif int(stat.physBumper[2]) == 1:
+                    if start_x == None:
+                        start_x = stat.x
+                        start_y = stat.y
+                    print("left bumped")
+                    ser.write(bytes([137, 255, 156, 0, 0]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 255, 255]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 0, 0, 0]))
+            print("steering left")
+        elif steer_left is False and edge_done is False:
+            # Second edge following with right steering
+            err = abs(start_x - stat.x) + abs(start_y - stat.y)
+            print("err:", err)
+            if left_origin == False:
+                if err > origin_err_goal:
+                    left_origin = True
+            if err < origin_err_goal - 50 and left_origin:
+                print("returned to origin")
+                ser.write(bytes([137, 0, 0, 0, 0]))
+                edge_done = True
+                time.sleep(2)
+                start_x = stat.x
+                start_y = stat.y
+                left_origin = False
+            if (int)(stat.lightBumper[1]) == 1 or (int)(stat.lightBumper[2]) == 1:
+                ser.write(bytes([137, 0, 100, 0, 1]))
+                while (int)(stat.lightBumper[1]) == 1 or (int)(stat.lightBumper[2]) == 1:
+                    print("turning")
+                ser.write(bytes([137, 0, 0, 0, 0])) # Is this necessary
+            else:
+                ser.write(bytes([137, 0, 100, 252, 0]))
+                if int(stat.physBumper[3]) == 1:
+                    print("right bumped")
+                    ser.write(bytes([137, 255, 156, 0, 0]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 0, 1]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 0, 0]))
+                elif int(stat.physBumper[2]) == 1:
+                    print("left bumped")
+                    ser.write(bytes([137, 255, 156, 0, 0]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 0, 1]))
+                    time.sleep(1)
+                    ser.write(bytes([137, 0, 100, 0, 0]))
+                print("steering right")
         else:
-            # Initiate moving back and forth
-
-        if rightBump == 1:
-            print("right bumped")
-            # ser.write(bytes([137, 0, 0, 0, 0]))
-            ser.write(bytes([137, 255, 156, 0, 0]))
-            time.sleep(0.3)
-            ser.write(bytes([137, 0, 100, 0, 1]))
-            time.sleep(0.3)
+            # Scanning the rest of the room
+            print("scanning the rest")
+            err = abs(start_x - stat.x) + abs(start_y - stat.y)
+            print("err:", err)
+            if left_origin == False:
+                if err > origin_err_goal:
+                    left_origin = True
+            # if err < 100 and left_origin:
+            #     print("returned to origin")
+            #     ser.write(bytes([137, 0, 0, 0, 0]))
+            #     break
+            # going to the first wall
+            if first_wall is False:
+                if (int)(stat.lightBumper[1]) == 0 or (int)(stat.lightBumper[2]) == 0:
+                    ser.write(bytes([137, 0, 100, 0, 0]))
+                    while (int)(stat.lightBumper[1]) == 0 or (int)(stat.lightBumper[2]) == 0:
+                        if int(stat.physBumper[3]) == 1:
+                            # print("right bumped")
+                            ser.write(bytes([137, 255, 156, 0, 0]))
+                            time.sleep(0.2)
+                            ser.write(bytes([137, 0, 100, 0, 1]))
+                            time.sleep(0.2)
+                            ser.write(bytes([137, 0, 100, 0, 0]))
+                        elif int(stat.physBumper[2]) == 1:
+                            # print("left bumped")
+                            ser.write(bytes([137, 255, 156, 0, 0]))
+                            time.sleep(0.2)
+                            ser.write(bytes([137, 0, 100, 255, 255]))
+                            time.sleep(0.2)
+                            ser.write(bytes([137, 0, 100, 0, 0]))
+                        print("going straight")
+                    ser.write(bytes([137, 0, 0, 0, 0])) # Is this necessary
+                    time.sleep(1)
+                    first_wall = True
+                # if (int)(stat.lightBumper[0]) == 1: # Maybe stricter condition required
+                #     ser.write(bytes([137, 0, 100, 0, 1]))
+                #     while (int)(stat.lightBumper[1]) == 1 or (int)(stat.lightBumper[2]) == 1:
+                #         print("turning")
+                #     # ser.write(bytes([137, 0, 100, 0, 0]))
+                #     ser.write(bytes([137, 0, 0, 0, 0]))
+                #     return
+                # time.sleep(1)
+                ser.write(bytes([137, 0, 100, 0, 1]))
+                while (int)(stat.lightBumper[1]) == 1 or (int)(stat.lightBumper[2]) == 1 or (int)(stat.lightBumper[3]) == 1:
+                    print("turning")
+                hor_ang = stat.ang
+                print(hor_ang)
+            # hor_ang = (stat.ang - math.pi)%(2*math.pi)
+            ser.write(bytes([137, 0, 100, 0, 0]))
+            while (int)(stat.lightBumper[2]) == 0 and (int)(stat.lightBumper[3]) == 0: #and \
+                #   (int)(stat.lightBumper[1]) == 0 and (int)(stat.lightBumper[4]) == 0:
+                if int(stat.physBumper[3]) == 1:
+                    print("right bumped")
+                    ser.write(bytes([137, 255, 156, 0, 0]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 0, 1]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 0, 0]))
+                elif int(stat.physBumper[2]) == 1:
+                    print("left bumped")
+                    ser.write(bytes([137, 255, 156, 0, 0]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 255, 255]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 0, 0]))
+                print("going straight")
+            ser.write(bytes([137, 0, 0, 0, 0])) 
+            time.sleep(1)   
+            print("time to turn")
+            if on_right is True:
+                ser.write(bytes([137, 0, 100, 0, 1]))
+            else:
+                ser.write(bytes([137, 0, 100, 255, 255]))
+            # while ((int)(stat.lightBumper[1]) == 1 or (int)(stat.lightBumper[2]) == 1 or (int)(stat.lightBumper[3]) == 1) or \
+                    # ((int)(stat.lightBumper[0] == 0 and (int)(stat.lightBumper[5] == 0))):
+            while (int)(stat.lightBumper[1]) == 1 or (int)(stat.lightBumper[2]) == 1 or (int)(stat.lightBumper[3]) == 1:
+                print("turning")
+            time.sleep(0.5)
+            ser.write(bytes([137, 0, 100, 0, 0]))
+            t_end = time.time() + 5
+            while time.time() < t_end:
+                if int(stat.physBumper[3]) == 1:
+                    print("right bumped")
+                    ser.write(bytes([137, 255, 156, 0, 0]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 0, 1]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 0, 0]))
+                elif int(stat.physBumper[2]) == 1:
+                    print("left bumped")
+                    ser.write(bytes([137, 255, 156, 0, 0]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 255, 255]))
+                    time.sleep(0.2)
+                    ser.write(bytes([137, 0, 100, 0, 0]))
+                print("moving a bit further")
+            
+            target_ang = hor_ang if not on_right else (hor_ang - math.pi)%(2 * math.pi)
+            if on_right is True:
+                ser.write(bytes([137, 0, 100, 0, 1]))
+            else:
+                ser.write(bytes([137, 0, 100, 255, 255]))
+            while abs(stat.ang - target_ang) > epsilon:
+                print("target:", target_ang, " err:", abs(stat.ang - target_ang), " or:", on_right)
             ser.write(bytes([137, 0, 0, 0, 0]))
-        elif leftBump == 1:
-            print("left bumped")
-            # ser.write(bytes([137, 0, 0, 0, 0]))
-            ser.write(bytes([137, 255, 156, 0, 0]))
-            time.sleep(0.3)
-            ser.write(bytes([137, 0, 100, 255, 255]))
-            time.sleep(0.3)
-            ser.write(bytes([137, 0, 0, 0, 0]))
+            on_right = not on_right
 
-        if (stat.x - start_x) + (stat.y - start_y) < 10:
-            edge_complete = True
-
-        
-        print(lightBumper, physBumper)
-        # if leftBump == 1:
-            # print("right bumped")
 
         # print("R:", right, " FR:", frontRight, " CR:", centerRight, " CL:", centerLeft, " FL:", frontLeft, " L:", left)
         # print("L:", leftBump, " R:", rightBump)
-
     
 def main():
     robot = Robot_stat()
@@ -210,10 +359,14 @@ def main():
     ser = robot.ser
     # Send "Start" Opcode to start Open Interface, Roomba in Passive Mode
     ser.write(bytes([128]))
+    # ser.write(bytes([7]))
+    # time.sleep(5)
+    # ser.write(bytes([128]))
     robot.state = "passive"
     # Send "Safe Mode" Opcode to enable Roomba to respond to commands
     ser.write(bytes([131])) #132:full 131:safe
-    ser.write(bytes([148, 4, 19, 20, 45, 7])) # Initiate streaming
+    # ser.write(bytes([148, 4, 19, 20, 45, 7])) # Initiate streaming
+    ser.write(bytes([148, 4, 43, 44, 45, 7])) # Initiate streaming
     robot.state = "safe"
     t_odometry.start()
     t_drive.start()
@@ -221,6 +374,7 @@ def main():
     # t_wake.start()
     while True:
         # print(ser.in_waiting)
+        # print(t_map.is_alive() is False)
         if keyboard.is_pressed("esc"):
             ser.write(bytes([137, 0, 0, 0, 0]))
             ser.write(bytes([150, 0]))
@@ -229,10 +383,11 @@ def main():
                 # print(ser.in_waiting)
             data = {'x_data': robot.x_arr, 'y_data': robot.y_arr}
             # plt.plot('x_data','y_data',data=data)
-            plt.scatter('x_data','y_data',data=data)
+            plt.scatter('x_data','y_data',data=data, s=2)
+            plt.axis('scaled')
             # print(data)
             break
-        elif keyboard.is_pressed("m") and (t_map.is_alive() == False):
+        elif keyboard.is_pressed("m") and (t_map.is_alive() is False):
             print("map thread button pressed")
             t_map.start()
     plt.show()
