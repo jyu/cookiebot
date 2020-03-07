@@ -63,7 +63,7 @@ if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', action="store_true", help="show display")
-    parser.add_argument('-teleop', action="store_true", help='only store for teleop')
+    parser.add_argument('-teleop', action="store_true", help='recording for teleop, otherwise recording starts automatically')
     parser.add_argument('-mode', help='what gesture is being recorded')
     parser.add_argument('-dir', help='directory to save the features')
 
@@ -72,6 +72,9 @@ if __name__ == "__main__":
     teleop_only = args.teleop
     mode = args.mode
     feat_dir = args.dir
+    
+    frames_until_capture = 200
+    frames_to_capture = 300
 
     if mode == None:
         print("No mode for collecting data found, exiting..")
@@ -165,15 +168,29 @@ if __name__ == "__main__":
 
         #print(ms, "ms,", fps, "fps", end="\r")
         #print(command, end="\r")
-        
+        white = (255, 255, 255) 
+        black = (0, 0, 0)
         if display:
             font = cv2.FONT_HERSHEY_SIMPLEX
-            cv2.putText(img, str(fps) + " FPS", (20, 20), font, .5, (255, 255, 255), 1, cv2.LINE_AA)
-            cv2.putText(img, str(ms) + " ms per frame", (20, 50), font, .5, (255, 255, 255), 1, cv2.LINE_AA)
-            cv2.putText(img, str(command), (20, 100), font, .5, (0, 0, 0), 1, cv2.LINE_AA)
+            cv2.putText(img, str(fps) + " FPS", (20, 20), font, .5, white, 1, cv2.LINE_AA)
+            cv2.putText(img, str(ms) + " ms per frame", (20, 50), font, .5, white, 1, cv2.LINE_AA)
+            cv2.putText(img, str(command), (20, 100), font, .5, black, 1, cv2.LINE_AA)
+            
+            skip = False
+            if not teleop_only:
+                if frames_until_capture > 0:
+                    until_msg = str(frames_until_capture) + " frames until capture"
+                    cv2.putText(img, until_msg, (20, 150), font, .5, white, 1, cv2.LINE_AA)
+                    skip = True
+                    frames_until_capture -= 1
+                else:
+                    msg = str(written) + " frames captured"
+                    cv2.putText(img, msg, (20, 150), font, .5, white, 1, cv2.LINE_AA)
 
             cv2.imshow('image',img)
             key = cv2.waitKey(1)
+            if skip:
+                continue
 
             # Auto method
 
@@ -202,7 +219,11 @@ if __name__ == "__main__":
             fwrite.close()
             written += 1
             print("written", written)
-
+            
+            # For all other methods, record a set number of frames
+            if not teleop_only and written > frames_to_capture:
+                print("Done!")
+                exit()
             """
             if key != -1:
                 # Must follow teleop heuristic

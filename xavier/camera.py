@@ -24,8 +24,9 @@ if use_server:
     # Use websockets
     ws = create_connection("ws://localhost:5000/gestures")
 
-# Location of teleop SVM
+# Location of SVM
 teleop_svm = pickle.load(open("prod_models/teleop.svm", "rb"))
+point_svm = pickle.load(open("prod_models/point.svm", "rb"))
 
 # Location of OpenPose python binaries
 #openpose_path = "usr/lib/openpose"
@@ -84,6 +85,16 @@ def isConfidentAboutArm(res, confidence_threshold, side):
             res["l_shoulder"][conf] > confidence_threshold
         )
     return False
+
+def keypointsToPosition(keypoints):
+    if len(keypoints.shape) == 0:
+        return ""
+    feat = getKeyPointsFeat(keypoints)
+    feat = preprocessing.scale(feat)
+    feat = feat.reshape(1, -1)
+    svm_res = point_svm.predict(feat)
+    positions = ["0_0", "0_1", "0_2", "0_3", "0_4"]
+    return positions[svm_res[0]]
 
 def keypointsToCommand(keypoints):
     if len(keypoints.shape) == 0:
@@ -145,7 +156,6 @@ def keypointsToCommand(keypoints):
         flip = False
         if res["r_shoulder"][x] - res["l_shoulder"][x] > 0:
             flip = True
-            #print("flipping")
         
         if res["r_elbow"][x] - res["r_shoulder"][x] < -delta_tolerance:
             teleop_command = "teleop_right"
@@ -183,6 +193,7 @@ while success:
     img = datum.cvOutputData
     img = np.array(img, dtype=np.uint8)
     commands = keypointsToCommand(datum.poseKeypoints)
+    pos = keypointsToPosition(datum.poseKeypoints)
     command = commands[0]
 
     # We only want to change teleop command if we saw it 3 frames in a row
@@ -217,14 +228,17 @@ while success:
 
     #print(ms, "ms,", fps, "fps", end="\r")
     #print(command, end="\r")
-    
+
+    white = (255, 255, 255) 
+    black = (0,0,0)
     if display:
         font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(img, str(fps) + " FPS", (20, 20), font, .5, (255, 255, 255), 1, cv2.LINE_AA)
-        cv2.putText(img, str(ms) + " ms per frame", (20, 50), font, .5, (255, 255, 255), 1, cv2.LINE_AA)
-        cv2.putText(img, "Heuristics: " + str(command), (20, 100), font, .5, (0, 0, 0), 1, cv2.LINE_AA)
+        cv2.putText(img, str(fps) + " FPS", (20, 20), font, .5, white, 1, cv2.LINE_AA)
+        cv2.putText(img, str(ms) + " ms per frame", (20, 50), font, .5, white, 1, cv2.LINE_AA)
+        cv2.putText(img, "Heuristics: " + str(command), (20, 100), font, .5, black, 1, cv2.LINE_AA)
         if len(commands) > 1:
-            cv2.putText(img, "Model: " + str(commands[1]), (20, 150), font, .5, (0, 0, 0), 1, cv2.LINE_AA)
+            cv2.putText(img, "Model: " + str(commands[1]), (20, 150), font, .5, black, 1, cv2.LINE_AA)
+        cv2.putText(img, "Position: " + str(pos), (20, 200), font, .5, white, 1, cv2.LINE_AA)
 
         cv2.imshow('image',img)
         cv2.waitKey(1)
