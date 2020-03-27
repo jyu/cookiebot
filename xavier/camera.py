@@ -14,11 +14,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-s', action="store_true") # Use server
 parser.add_argument('-d', action="store_true") # Use display
 parser.add_argument('-m', action="store_true") # Use model for teleop
+parser.add_argument('-v') # Use video
 
 args = parser.parse_args()
 use_server = args.s
 display = args.d
 use_model = args.m
+video = args.v
 
 if use_server:
     # Use websockets
@@ -48,8 +50,14 @@ opWrapper.configure(params)
 opWrapper.start()
 
 # Start reading camera feed
-cap = cv2.VideoCapture("/dev/video0", cv2.CAP_V4L)
-#cap = cv2.VideoCapture("/dev/video0", cv2.CAP_GSTREAMER)
+cap = None
+if video:
+    cap = cv2.VideoCapture(video)
+    out_f = "out/" + video
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(out_f, fourcc, 30.0, (int(cap.get(3)), int(cap.get(4))))
+else:    
+    cap = cv2.VideoCapture("/dev/video0", cv2.CAP_V4L)
 
 if display:
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
@@ -93,7 +101,7 @@ def keypointsToPosition(keypoints):
     feat = preprocessing.scale(feat)
     feat = feat.reshape(1, -1)
     svm_res = point_svm.predict(feat)
-    positions = ["0_0", "0_1", "0_2", "0_3", "0_4"]
+    positions = ["0_0", "0_1", "0_2", "0_3", "0_4", "0_5"]
     return positions[svm_res[0]]
 
 def keypointsToCommand(keypoints):
@@ -187,6 +195,10 @@ success = True
 while success:
     start_time = time.time()
     success, img = cap.read()
+
+    if not success:
+        break
+
     datum = op.Datum()
     datum.cvInputData = img
     opWrapper.emplaceAndPop([datum])
@@ -229,16 +241,19 @@ while success:
     #print(ms, "ms,", fps, "fps", end="\r")
     #print(command, end="\r")
 
-    white = (255, 255, 255) 
-    black = (0,0,0)
-    if display:
+    if display or video:
+        white = (255, 255, 255) 
+        black = (0,0,0)
         font = cv2.FONT_HERSHEY_SIMPLEX
         cv2.putText(img, str(fps) + " FPS", (20, 20), font, .5, white, 1, cv2.LINE_AA)
         cv2.putText(img, str(ms) + " ms per frame", (20, 50), font, .5, white, 1, cv2.LINE_AA)
-        cv2.putText(img, "Heuristics: " + str(command), (20, 100), font, .5, black, 1, cv2.LINE_AA)
+        cv2.putText(img, "Heuristics: " + str(command), (20, 100), font, .5, white, 1, cv2.LINE_AA)
         if len(commands) > 1:
-            cv2.putText(img, "Model: " + str(commands[1]), (20, 150), font, .5, black, 1, cv2.LINE_AA)
+            cv2.putText(img, "Model: " + str(commands[1]), (20, 150), font, .5, white, 1, cv2.LINE_AA)
         cv2.putText(img, "Position: " + str(pos), (20, 200), font, .5, white, 1, cv2.LINE_AA)
-
-        cv2.imshow('image',img)
-        cv2.waitKey(1)
+        
+        if video:
+            out.write(img)
+        else:    
+            cv2.imshow('image',img)
+            cv2.waitKey(1)
