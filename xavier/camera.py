@@ -52,7 +52,7 @@ opWrapper.start()
 # Start reading camera feed
 cap = None
 if video:
-    cap = cv2.VideoCapture(video)
+    cap = cv2.VideoCapture("data/" + video)
     out_f = "out/" + video
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(out_f, fourcc, 30.0, (int(cap.get(3)), int(cap.get(4))))
@@ -191,7 +191,12 @@ def keypointsToCommand(keypoints):
         return [teleop_command, model_teleop_command]
     return ["none"]
 
-success = True
+def displayText(image, text, position):
+    white = (255,255,255)
+    black = (0,0,0)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(img, text, position, font, .5, white, 1, cv2.LINE_AA)
+
 while success:
     start_time = time.time()
     success, img = cap.read()
@@ -242,15 +247,14 @@ while success:
     #print(command, end="\r")
 
     if display or video:
-        white = (255, 255, 255) 
-        black = (0,0,0)
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(img, str(fps) + " FPS", (20, 20), font, .5, white, 1, cv2.LINE_AA)
-        cv2.putText(img, str(ms) + " ms per frame", (20, 50), font, .5, white, 1, cv2.LINE_AA)
-        cv2.putText(img, "Heuristics: " + str(command), (20, 100), font, .5, white, 1, cv2.LINE_AA)
+        displayText(img, str(fps) + " FPS", (20,20))
+        displayText(img, str(ms) + " ms per frame", (20,50))
+        displayText(img, "Heuristics: " + str(command), (20, 80))
+
         if len(commands) > 1:
-            cv2.putText(img, "Model: " + str(commands[1]), (20, 150), font, .5, white, 1, cv2.LINE_AA)
-        cv2.putText(img, "Position: " + str(pos), (20, 200), font, .5, white, 1, cv2.LINE_AA)
+            displayText(img, "Model: " + str(commands[1]), (20, 110))
+
+        displayText(img, "Position: " + str(pos), (20, 140))
         
         if video:
             out.write(img)
