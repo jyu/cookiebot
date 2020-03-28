@@ -13,13 +13,11 @@ from get_gesture_data import getKeyPointsFeat
 parser = argparse.ArgumentParser()
 parser.add_argument('-s', action="store_true") # Use server
 parser.add_argument('-d', action="store_true") # Use display
-parser.add_argument('-m', action="store_true") # Use model for teleop
 parser.add_argument('-v') # Use video
 
 args = parser.parse_args()
 use_server = args.s
 display = args.d
-use_model = args.m
 video = args.v
 
 if use_server:
@@ -51,8 +49,11 @@ opWrapper.start()
 
 # Start reading camera feed
 cap = None
+print("video", video)
 if video:
-    cap = cv2.VideoCapture("data/" + video)
+    path = "data/" + video
+    print("Using video as input from path", path)
+    cap = cv2.VideoCapture(path)
     out_f = "out/" + video
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(out_f, fourcc, 30.0, (int(cap.get(3)), int(cap.get(4))))
@@ -62,9 +63,6 @@ else:
 if display:
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
     cv2.resizeWindow('image', 900, 1000)
-
-success, img = cap.read()
-print(img.shape)
 
 # sliding window for timing data
 window_size = 100
@@ -98,15 +96,29 @@ def keypointsToPosition(keypoints):
     if len(keypoints.shape) == 0:
         return ""
     feat = getKeyPointsFeat(keypoints)
+    if np.sum(feat) == 0:
+        return ""
     feat = preprocessing.scale(feat)
     feat = feat.reshape(1, -1)
     svm_res = point_svm.predict(feat)
     positions = ["0_0", "0_1", "0_2", "0_3", "0_4", "0_5"]
     return positions[svm_res[0]]
 
+def keypointsToTeleop(keypoints):
+    if len(keypoints.shape) == 0:
+        return ""
+    feat = getKeyPointsFeat(keypoints)
+    if np.sum(feat) == 0:
+        return ""
+    feat = preprocessing.scale(feat)
+    feat = feat.reshape(1, -1)
+    svm_res = teleop_svm.predict(feat)
+    commands = ["teleop_left", "teleop_straight", "teleop_right"]
+    return commands[svm_res[0]]
+
 def keypointsToCommand(keypoints):
     if len(keypoints.shape) == 0:
-        return ["none"]
+        return "none"
     person = keypoints[0]
     # For getting the index of the parts we want
     #poseModel = op.PoseModel.BODY_25
@@ -151,14 +163,6 @@ def keypointsToCommand(keypoints):
 
         teleop_mode = True
 
-        # MODEL METHOD
-        feat = getKeyPointsFeat(keypoints)
-        feat = preprocessing.scale(feat)
-        feat = feat.reshape(1, -1)
-        svm_res = teleop_svm.predict(feat)
-        commands = ["teleop_left", "teleop_straight", "teleop_right"]
-        model_teleop_command = commands[svm_res[0]]
-
         # NO MODEL METHOD
         # Check flip, user turned around
         flip = False
@@ -176,20 +180,16 @@ def keypointsToCommand(keypoints):
         else:
             teleop_command = "teleop_straight"
         
-        # Only use the model when we are told to
-        #if use_model:
-        #    teleop_command = model_teleop_command
-
         
     if right_hand_raised and left_hand_raised:
-        return ["stop"]
+        return "stop"
     if right_hand_raised:
-        return ["to_me"]
+        return "to_me"
     if left_hand_raised:
-        return ["go_home"]
+        return "go_home"
     if teleop_mode:
-        return [teleop_command, model_teleop_command]
-    return ["none"]
+        return teleop_command
+    return "none"
 
 def displayText(image, text, position):
     white = (255,255,255)
@@ -197,9 +197,20 @@ def displayText(image, text, position):
     font = cv2.FONT_HERSHEY_SIMPLEX
     cv2.putText(img, text, position, font, .5, white, 1, cv2.LINE_AA)
 
+def framesToTimestamp(frames):
+    seconds = frames / 30
+    minutes = round(seconds / 60)
+    seconds = round(seconds % 60)
+    return str(minutes) + ":" + str(seconds)
+
+success, img = cap.read()
+frames = 1
+print(img.shape)
+
 while success:
     start_time = time.time()
     success, img = cap.read()
+    frames += 1
 
     if not success:
         break
@@ -209,9 +220,9 @@ while success:
     opWrapper.emplaceAndPop([datum])
     img = datum.cvOutputData
     img = np.array(img, dtype=np.uint8)
-    commands = keypointsToCommand(datum.poseKeypoints)
+    command = keypointsToCommand(datum.poseKeypoints)
     pos = keypointsToPosition(datum.poseKeypoints)
-    command = commands[0]
+    teleop = keypointsToTeleop(datum.poseKeypoints)
 
     # We only want to change teleop command if we saw it 3 frames in a row
     if command != last_command:
@@ -232,7 +243,9 @@ while success:
                 if use_server:
                     print("sending command", command)
                     ws.send(command)
-                print("new command", command)
+                
+                timestamp = framesToTimestamp(frames)
+                print("new command", command, "timestamp", timestamp)
 
     end_time = time.time()
 
@@ -250,10 +263,7 @@ while success:
         displayText(img, str(fps) + " FPS", (20,20))
         displayText(img, str(ms) + " ms per frame", (20,50))
         displayText(img, "Heuristics: " + str(command), (20, 80))
-
-        if len(commands) > 1:
-            displayText(img, "Model: " + str(commands[1]), (20, 110))
-
+        displayText(img, "Model: " + str(teleop), (20, 110))
         displayText(img, "Position: " + str(pos), (20, 140))
         
         if video:
