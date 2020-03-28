@@ -64,17 +64,6 @@ if display:
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
     cv2.resizeWindow('image', 900, 1000)
 
-# sliding window for timing data
-window_size = 100
-window = []
-
-# Last command 
-last_command = "none"
-
-# Hold gesture for gesture_buffer frames before changing the command
-gesture_buffer = 10
-new_command = "none"
-new_command_count = 0
 
 def isConfidentAboutArm(res, confidence_threshold, side):
     conf = 2
@@ -203,18 +192,26 @@ def framesToTimestamp(frames):
     seconds = round(seconds % 60)
     return str(minutes) + ":" + str(seconds)
 
+# sliding window for timing data
+window_size = 100
+window = []
+
+# Last command 
+last_command = "none"
+last_command_sent = "none"
+last_command_time = "0"
+
+# Hold gesture for gesture_buffer frames before changing the command
+gesture_buffer = 10
+new_command = "none"
+new_command_count = 0
+
 success, img = cap.read()
 frames = 1
 print(img.shape)
 
 while success:
     start_time = time.time()
-    success, img = cap.read()
-    frames += 1
-
-    if not success:
-        break
-
     datum = op.Datum()
     datum.cvInputData = img
     opWrapper.emplaceAndPop([datum])
@@ -224,28 +221,55 @@ while success:
     pos = keypointsToPosition(datum.poseKeypoints)
     teleop = keypointsToTeleop(datum.poseKeypoints)
 
-    # We only want to change teleop command if we saw it 3 frames in a row
+    if "teleop" in command:
+        command = teleop
+    
+    is_other_command = command != "none" and not "teleop" in command
+    is_none_command = command == "none"
+    is_teleop_command = "teleop" in command
+    
+    #print(command, frames)
+    #print(command, "is teleop", is_teleop_command, "is none", is_none_command,
+    #"is other", is_other_command)
+
+    # We only want to send teleop or none command if we saw it 10 frames in a row
+    use_command = False
+    # We're evaluating if we should use this new command we've been tracking
+    if not is_other_command and new_command == command:
+        #print("New command and command are the same", command, new_command)
+        new_command_count += 1
+        # We saw it enough times, use it
+        if new_command_count > gesture_buffer:
+            use_command = True
+
+    # We are seeing a new command        
     if command != last_command:
+        # For non teleop commands, we want to transition from none
+        if is_other_command and last_command_sent == "none":
+            use_command = True
 
-        # We have never seen this command before 
-        if (command != new_command and 
-            not "teleop" in last_command):
+        # Smooth out none commands or teleop commands 
+        new_command = command
+        #print("Trying a new command", new_command.ljust(12), "at frame", frames)
+        new_command_count = 1
 
-            new_command = command
-            new_command_count = 1
-        else:
-            new_command_count += 1
-            new_command = command
-            # We saw it enough times, use it
-            if new_command_count > gesture_buffer:
-                last_command = command
-                # Communicate to server
-                if use_server:
-                    print("sending command", command)
-                    ws.send(command)
-                
-                timestamp = framesToTimestamp(frames)
-                print("new command", command, "timestamp", timestamp)
+    # We want to use this command        
+    if use_command and command != last_command_sent:
+        #print("sent command", command.ljust(12), "last command",
+        #        last_command.ljust(12), "new command", new_command, "frame", frames)
+        new_command = command
+        new_command_count = 0
+        # Communicate to server
+        if use_server:
+            print("sending command", command)
+            ws.send(command)
+        
+        timestamp = framesToTimestamp(frames)
+        last_command_sent = command
+        last_command_time = timestamp
+        print("sent command", command.ljust(12), "timestamp", timestamp)
+
+    last_command = command
 
     end_time = time.time()
 
@@ -261,13 +285,20 @@ while success:
 
     if display or video:
         displayText(img, str(fps) + " FPS", (20,20))
-        displayText(img, str(ms) + " ms per frame", (20,50))
-        displayText(img, "Heuristics: " + str(command), (20, 80))
-        displayText(img, "Model: " + str(teleop), (20, 110))
-        displayText(img, "Position: " + str(pos), (20, 140))
+        displayText(img, str(ms) + " ms per frame", (20,40))
+        displayText(img, "Heuristics: " + str(command), (20, 60))
+        displayText(img, "Model: " + str(teleop), (20, 80))
+        displayText(img, "Position: " + str(pos), (20, 100))
+        displayText(img, "Last sent: " + last_command_sent + " " +
+                last_command_time, (20, 120))
         
         if video:
             out.write(img)
         else:    
             cv2.imshow('image',img)
             cv2.waitKey(1)
+
+    # Prepare next frame
+    success, img = cap.read()
+    frames += 1
+
