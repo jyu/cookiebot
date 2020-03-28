@@ -1,0 +1,8 @@
+model_path: models/point.svm
+data_dir: point_data
+
+test_size: 0.2      
+C: 1000
+kernel: poly
+
+runs: 5

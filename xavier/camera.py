@@ -8,6 +8,7 @@ import argparse
 import pickle
 from sklearn import preprocessing
 from get_gesture_data import getKeyPointsFeat
+import os
 
 # Parse arguments
 parser = argparse.ArgumentParser()
@@ -26,7 +27,15 @@ if use_server:
 
 # Location of SVM
 teleop_svm = pickle.load(open("prod_models/teleop.svm", "rb"))
-point_svm = pickle.load(open("prod_models/point.svm", "rb"))
+#point_svm = pickle.load(open("prod_models/point.svm", "rb"))
+point_svms = {}
+point_classes = os.listdir("point_data")
+for m in os.listdir("models"):
+    if not "point" in m:
+        continue    
+
+    i = int(m.replace("point_", "").replace(".svm",""))
+    point_svms[i] = pickle.load(open("models/" + m, "rb"))
 
 # Location of OpenPose python binaries
 #openpose_path = "usr/lib/openpose"
@@ -89,9 +98,15 @@ def keypointsToPosition(keypoints):
         return ""
     feat = preprocessing.scale(feat)
     feat = feat.reshape(1, -1)
-    svm_res = point_svm.predict(feat)
-    positions = ["0_0", "0_1", "0_2", "0_3", "0_4", "0_5"]
-    return positions[svm_res[0]]
+    
+    max_i_pred = (-1, -1)
+    for m in point_svms.keys():
+        point_svm = point_svms[m]
+        pred = point_svm.predict(feat)
+        if max_i_pred[0] == -1 or pred > max_i_pred[1]:
+            max_i_pred = (m, pred)
+
+    return point_classes[max_i_pred[0]]
 
 def keypointsToTeleop(keypoints):
     if len(keypoints.shape) == 0:

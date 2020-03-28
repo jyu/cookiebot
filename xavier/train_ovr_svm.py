@@ -6,6 +6,7 @@ from sklearn.metrics import average_precision_score
 import pickle
 import argparse
 import yaml
+import os
 
 # OVR SVM is different from train_svm because it trains one SVM for each class
 # https://courses.media.mit.edu/2006fall/mas622j/Projects/aisen-project/
@@ -21,7 +22,6 @@ config_path = args.c
 
 # Load parameters from config
 config = yaml.load(open(config_path), Loader=yaml.Loader)
-classes = config.get('classes')
 model_path = config.get('model_path')
 data_dir = config.get('data_dir')
 # SVM params
@@ -44,8 +44,10 @@ def getDataFromFile(f_name):
     return data
 
 classToData = {}
+classes = os.listdir(data_dir)
 for c in classes:
     data = getDataFromFile(c)
+    print("c", c, "data len", len(data))
     classToData[c] = data
 
 # Build SVM for each class
@@ -81,7 +83,7 @@ for run in range(runs):
         #print("All train data shape X_train:", X_train.shape, "Y_train:", Y_train.shape)
         #print("All test data shape X_test:", X_test.shape, "Y_test:", Y_test.shape)
 
-        model = SVC(probability=True, C=C, kernel=kernel)
+        model = SVC(probability=True, C=C, kernel=kernel, class_weight="balanced")
         model.fit(X_train, Y_train)
 
         score = model.score(X_train, Y_train)
