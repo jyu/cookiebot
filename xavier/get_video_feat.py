@@ -92,12 +92,12 @@ if __name__ == "__main__":
     
     videos = os.listdir(video_dir)
     for video in videos:
-        path = video_dir + video
+        path = video_dir + "/" + video
         print("Using video as input from path", path)
         cap = cv2.VideoCapture(path)
         out_f = "feat_out/" + video
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(out_f, fourcc, 30.0/5, (int(cap.get(3)), int(cap.get(4))))
+        out = cv2.VideoWriter(out_f, fourcc, 30.0/3, (int(cap.get(3)), int(cap.get(4))))
 
         frames = 0
         success = True
@@ -105,13 +105,16 @@ if __name__ == "__main__":
         
         while success:
             success, img = cap.read()
+            if not success:
+                break
             frames += 1
+            # Run on every frame to improve accuracy
+            datum = op.Datum()
+            datum.cvInputData = img
+            opWrapper.emplaceAndPop([datum])
+            img = datum.cvOutputData
             # Save as feat only on 5th frame
-            if frames % 5 == 0:
-                datum = op.Datum()
-                datum.cvInputData = img
-                opWrapper.emplaceAndPop([datum])
-                img = datum.cvOutputData
+            if frames % 3 == 0:
                 img = np.array(img, dtype=np.uint8)
                 keypoints = datum.poseKeypoints
                 #command = keypointsToCommand(datum.poseKeypoints)
@@ -131,9 +134,7 @@ if __name__ == "__main__":
                 if feat is None:
                     continue
 
-                print(feat)
-                print(feat.shape)
-                fwrite = open(feat_dir + video.replace(".mp4", ""), 'a')
+                fwrite = open(feat_dir + "/" + video.replace(".mp4", ""), 'a')
                 line = str(feat[0])
                 for m in range(1, feat.shape[0]):
                     line += ";" + str(feat[m])
@@ -141,5 +142,5 @@ if __name__ == "__main__":
                 fwrite.write(line)
                 fwrite.close()
                 written += 1
-                print("written", written, "frame", frames)
+                print("written", written, "frame", frames, end="\r")
             
