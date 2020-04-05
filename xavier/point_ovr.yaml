@@ -1,8 +1,9 @@
 model_path: models/point.svm
 data_dir: point_data
+val_data_dir: point_val_data
 
 test_size: 0.2      
-C: 100
 kernel: poly
+C: 1000
 
 runs: 5

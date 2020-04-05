@@ -113,7 +113,7 @@ if __name__ == "__main__":
             datum.cvInputData = img
             opWrapper.emplaceAndPop([datum])
             img = datum.cvOutputData
-            # Save as feat only on 5th frame
+            # Save as feat only on 3th frame
             if frames % 3 == 0:
                 img = np.array(img, dtype=np.uint8)
                 keypoints = datum.poseKeypoints
