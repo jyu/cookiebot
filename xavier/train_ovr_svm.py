@@ -47,6 +47,8 @@ def getDataFromFile(data_dir, f_name):
 
 classToData = {}
 classToValData = {}
+classToModel = {}
+
 classes = os.listdir(data_dir)
 for c in classes:
     data = getDataFromFile(data_dir, c)
@@ -56,80 +58,61 @@ for c in classes:
     classToValData[c] = val_data
 
 # Build SVM for each class
-accs = np.zeros((runs, len(classes)))
-mAPs = np.zeros((runs, len(classes)))
-for run in range(runs):
+for i in range(len(classes)):
+    pos_class = classes[i]
 
-    for i in range(len(classes)):
-        pos_class = classes[i]
+    # Get data
+    X = []
+    Y = []
 
-        # Get data
-        X = []
-        Y = []
+    for c in classes:
+        label = 0
 
-        X_test = []
-        Y_test = []
-        
-        for c in classes:
-            label = 0
+        if c == pos_class:
+            label = 1
 
-            if c == pos_class:
-                label = 1
+        data = classToData[c]
+        for feat in data:
+            X.append(feat)
+            Y.append(label)
 
-            data = classToData[c]
-            for feat in data:
-                X.append(feat)
-                Y.append(label)
+    
+    # Train model
+    X = np.array(X)
+    Y = np.array(Y)
+    #print("All data shape X:", X.shape, "Y:", Y.shape)
 
-            val_data = classToValData[c]
-            for feat in val_data:
-                X_test.append(feat)
-                Y_test.append(label)
-        
-        # Train model
-        X = np.array(X)
-        Y = np.array(Y)
-        X_test = np.array(X_test)
-        Y_test = np.array(Y_test)
-        #print("All data shape X:", X.shape, "Y:", Y.shape)
+    model = SVC(probability=True, C=C, kernel=kernel, class_weight="balanced")
+    model.fit(X, Y)
+    classToModel[i] = model
+    #print(model.classes_)
 
-        model = SVC(probability=True, C=C, kernel=kernel, class_weight="balanced")
-        model.fit(X, Y)
+    score = model.score(X, Y)
+    #print("Training accuracy:", score)
+    new_model_path = model_path.replace(".svm", "_" + str(i) + ".svm")
+    out_f = open(new_model_path, 'wb')
+    pickle.dump(model, out_f)
 
-        score = model.score(X, Y)
-        #print("Training accuracy:", score)
-        score = model.score(X_test, Y_test)
-        #print("Test accuracy:", score)
-        Y_predict = model.predict_proba(X_test)
+print("Validating model")
+# Validation
+correct = 0
+total = 0
+for i in range(len(classes)):
+    c = classes[i]
 
-        Y_predict = Y_predict[:, 1]
-        mAP = average_precision_score(Y_test, Y_predict)
-        #print("mAP", mAP)
-
-        best_score = accs.max(axis=0)[i]
-        accs[run][i] = score
-        mAPs[run][i] = mAP
-
-        # Only save best model
-        if score > best_score: 
-            new_model_path = model_path.replace(".svm", "_" + str(i) + ".svm")
-            #print("Saving model for class", i, "at", new_model_path)
-            out_f = open(new_model_path, 'wb')
-            pickle.dump(model, out_f)
-
-print("acc\n", accs)
-best_accs = accs.max(axis=0)
-avg_accs = accs.mean(axis=0)
-print("best accuracy", best_accs)
-print("avg accuracy", avg_accs)
-print("average test accuracy", avg_accs.mean())
-print("mAPs\n", mAPs)
-best_mAP = mAPs.max(axis=0)
-avg_mAP = mAPs.mean(axis=0)
-print("best mAP", best_mAP)
-print("avg mAP", avg_mAP)
-print("average mAP", avg_mAP.mean())
+    val_data = classToValData[c]
+    for feat in val_data:
+        feat = feat.reshape(1, -1)
+        scores = []
+        for model_name in classToModel:
+            model = classToModel[model_name]
+            score = model.predict_proba(feat)[0][1]
+            scores.append(score)
+        scores = np.array(scores)
+        best_i = np.argmax(scores)
+        if best_i == i:
+            correct += 1
+        total += 1
+    
 print("C:", C, "| kernel:", kernel, "| test_size:", test_size, "| runs:", runs)
-#print("Final test accuracy scores:")
-#for i in range(best_scores.shape[0]):
-#    print)
+print("Val accuracy", correct/total)
