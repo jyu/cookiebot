@@ -7,8 +7,12 @@ from websocket import create_connection
 import argparse
 import pickle
 from sklearn import preprocessing
-from get_gesture_data import getKeyPointsFeat
+from get_camera_feat import getKeyPointsFeat
 import os
+
+import tensorflow as tf
+import keras
+from tensorflow.keras.models import load_model
 
 # Parse arguments
 parser = argparse.ArgumentParser()
@@ -27,18 +31,20 @@ if use_server:
 
 # Location of SVM
 teleop_svm = pickle.load(open("prod_models/teleop.svm", "rb"))
-#point_svm = pickle.load(open("prod_models/point.svm", "rb"))
-point_svms = {}
+point_nn = load_model("models/categorical_point_nn_mt.h5")
 point_classes = os.listdir("point_data")
+# Point SVM
+"""
+point_svms = {}
 for m in os.listdir("models"):
     if not "point" in m:
         continue    
 
     i = int(m.replace("point_", "").replace(".svm",""))
     point_svms[i] = pickle.load(open("models/" + m, "rb"))
+"""    
 
 # Location of OpenPose python binaries
-#openpose_path = "usr/lib/openpose"
 openpose_path = "../../openpose"
 openpose_python_path = openpose_path + "/build/python"
 sys.path.append(openpose_python_path)
@@ -98,7 +104,18 @@ def keypointsToPosition(keypoints):
         return ""
     feat = preprocessing.scale(feat)
     feat = feat.reshape(1, -1)
-    
+
+    out = point_nn.predict(feat)
+    out_x = np.argmax(out[0])
+    out_y = np.argmax(out[1])
+    x = [-2, -1, 0, 1, 2][out_x]
+    y = [0, 1, 2][out_y]
+    """
+    # Categorical NN
+    out = point_nn.predict(feat)[0]
+    point_class = point_classes[np.argmax(out)]
+
+    # SVM
     max_i_pred = (-1, -1)
     for m in point_svms.keys():
         point_svm = point_svms[m]
@@ -106,7 +123,20 @@ def keypointsToPosition(keypoints):
         if max_i_pred[0] == -1 or pred > max_i_pred[1]:
             max_i_pred = (m, pred)
 
-    return point_classes[max_i_pred[0]]
+    point_class = point_classes[max_i_pred[0]]
+
+    # Post processing 
+    point_class = point_class.split("_")
+    x = point_class[1]
+    # n1 means negative 1
+    if "n" in x:
+        x = -1 * int(x[1:])
+    else:
+        x = int(x)
+    
+    y = int(point_class[2])
+    """
+    return (x,y)
 
 def keypointsToTeleop(keypoints):
     if len(keypoints.shape) == 0:
@@ -299,14 +329,69 @@ while success:
     #print(command, end="\r")
 
     if display or video:
+        # Default gesture info
+        """
+        cv2.rectangle(
+            img, 
+            (0,360), 
+            (220,480), 
+            (0,0,0),
+            thickness=-1
+        )
+        displayText(img, str(fps) + " FPS", (20,380))
+        displayText(img, str(ms) + " ms per frame", (20,400))
+        displayText(img, "Heuristics: " + str(command), (20, 420))
+        displayText(img, "Model: " + str(teleop), (20, 440))
+        displayText(img, "Last sent: " + last_command_sent + " " +
+                last_command_time, (20, 460))
+        # Top right
+        """
         displayText(img, str(fps) + " FPS", (20,20))
         displayText(img, str(ms) + " ms per frame", (20,40))
         displayText(img, "Heuristics: " + str(command), (20, 60))
+        """
         displayText(img, "Model: " + str(teleop), (20, 80))
-        displayText(img, "Position: " + str(pos), (20, 100))
         displayText(img, "Last sent: " + last_command_sent + " " +
-                last_command_time, (20, 120))
-        
+                last_command_time, (20, 100))
+        """        
+        # Position info
+        displayText(img, "Position: " + str(pos), (20, 100))
+        displayText(img, "User: Purple", (20, 120))
+        displayText(img, "Point: Red", (20, 140))
+        for j in range(3):
+            for i in range(5):
+
+                x_start = 400
+                y_start = 20
+                size = 30
+
+                cv2.rectangle(
+                    img, 
+                    (x_start + size * i, y_start + size * j), 
+                    (x_start + size * (i + 1), y_start + size * (j + 1)), 
+                    (0,0,0)
+                )
+
+                # Location of point
+                if j == pos[1] and i == 4 - (pos[0] + 2):
+                    cv2.rectangle(
+                        img, 
+                        (x_start + size * i, y_start + size * j), 
+                        (x_start + size * (i + 1), y_start + size * (j + 1)), 
+                        (60,20,220),
+                        thickness = -1
+                    )
+                
+                # Location of user
+                if j == 0 and i == 2:
+                    cv2.rectangle(
+                        img, 
+                        (x_start + size * i, y_start + size * j), 
+                        (x_start + size * (i + 1), y_start + size * (j + 1)), 
+                        (221,160,221),
+                        thickness = -1
+                    )
+
         if video:
             out.write(img)
         else:    
@@ -317,3 +402,4 @@ while success:
     success, img = cap.read()
     frames += 1
 
+out.release()

@@ -100,10 +100,10 @@ input_shape = X_train[0].shape
 
 # Model
 inp = Input(shape=input_shape, name="input")
-x = Dense(8, activation='relu')(inp)
-x = Dense(8, activation='relu')(x)
-x_out = Dense(3, activation='softmax', name='x_out')(x)
-y_out = Dense(3, activation='softmax', name='y_out')(x)
+x = Dense(16, activation='relu')(inp)
+x = Dense(16, activation='relu')(x)
+x_out = Dense(len(classes_x), activation='softmax', name='x_out')(x)
+y_out = Dense(len(classes_y), activation='softmax', name='y_out')(x)
 model = Model(inp, [x_out, y_out])
 
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
