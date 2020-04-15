@@ -11,8 +11,12 @@ from get_camera_feat import getKeyPointsFeat
 import os
 
 import tensorflow as tf
-import keras
+#import keras
 from tensorflow.keras.models import load_model
+
+my_devices = tf.config.experimental.list_physical_devices(device_type='CPU')
+tf.config.experimental.set_visible_devices(devices= my_devices, device_type='CPU')
+#tf.debugging.set_log_device_placement(True)
 
 # Parse arguments
 parser = argparse.ArgumentParser()
@@ -325,7 +329,7 @@ while success:
     ms = round(sec * 1000, 3)
     fps = round(1 / sec, 3)
 
-    #print(ms, "ms,", fps, "fps", end="\r")
+    print(ms, "ms,", fps, "fps", end="\r")
     #print(command, end="\r")
 
     if display or video:
