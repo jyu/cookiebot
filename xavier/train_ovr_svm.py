@@ -6,6 +6,7 @@ from sklearn.metrics import average_precision_score
 import pickle
 import argparse
 import yaml
+import os
 
 # OVR SVM is different from train_svm because it trains one SVM for each class
 # https://courses.media.mit.edu/2006fall/mas622j/Projects/aisen-project/
@@ -21,9 +22,10 @@ config_path = args.c
 
 # Load parameters from config
 config = yaml.load(open(config_path), Loader=yaml.Loader)
-classes = config.get('classes')
 model_path = config.get('model_path')
 data_dir = config.get('data_dir')
+val_data_dir = config.get('val_data_dir')
+
 # SVM params
 C = config.get('C')
 kernel = config.get('kernel')
@@ -32,7 +34,7 @@ runs = config.get('runs')
 print("C:", C, "| kernel:", kernel, "| test_size:", test_size, "| runs:", runs)
 
 # Returns data as a python list of np arr features
-def getDataFromFile(f_name):
+def getDataFromFile(data_dir, f_name):
     f = open(data_dir + "/" + f_name)
     lines = f.readlines()
     data = []
@@ -44,9 +46,14 @@ def getDataFromFile(f_name):
     return data
 
 classToData = {}
+classToValData = {}
+classes = os.listdir(data_dir)
 for c in classes:
-    data = getDataFromFile(c)
+    data = getDataFromFile(data_dir, c)
+    val_data = getDataFromFile(val_data_dir, c)
+    print("c", c, "data len", len(data), "val data len", len(val_data))
     classToData[c] = data
+    classToValData[c] = val_data
 
 # Build SVM for each class
 accs = np.zeros((runs, len(classes)))
@@ -59,6 +66,9 @@ for run in range(runs):
         # Get data
         X = []
         Y = []
+
+        X_test = []
+        Y_test = []
         
         for c in classes:
             label = 0
@@ -70,21 +80,23 @@ for run in range(runs):
             for feat in data:
                 X.append(feat)
                 Y.append(label)
+
+            val_data = classToValData[c]
+            for feat in val_data:
+                X_test.append(feat)
+                Y_test.append(label)
         
         # Train model
         X = np.array(X)
         Y = np.array(Y)
+        X_test = np.array(X_test)
+        Y_test = np.array(Y_test)
         #print("All data shape X:", X.shape, "Y:", Y.shape)
 
-        X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=test_size)
+        model = SVC(probability=True, C=C, kernel=kernel, class_weight="balanced")
+        model.fit(X, Y)
 
-        #print("All train data shape X_train:", X_train.shape, "Y_train:", Y_train.shape)
-        #print("All test data shape X_test:", X_test.shape, "Y_test:", Y_test.shape)
-
-        model = SVC(probability=True, C=C, kernel=kernel)
-        model.fit(X_train, Y_train)
-
-        score = model.score(X_train, Y_train)
+        score = model.score(X, Y)
         #print("Training accuracy:", score)
         score = model.score(X_test, Y_test)
         #print("Test accuracy:", score)
