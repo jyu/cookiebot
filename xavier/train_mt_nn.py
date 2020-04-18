@@ -116,7 +116,7 @@ model.fit(
     X_train, 
     [Y_train_x, Y_train_y], 
     batch_size=32, 
-    epochs=100, 
+    epochs=10, 
     validation_data=(X_test, [Y_test_x, Y_test_y]),
     shuffle=True,
     callbacks=[checkpoint]

@@ -27,6 +27,21 @@ def getKeyPointsFeat(keypoints):
 
     return np.array(feat)
 
+def getKeyPointsLocationFeat(keypoints, img_shape):
+
+    if len(keypoints.shape) == 0:
+        return None
+
+    height, width, _ = img_shape
+
+    person = keypoints[0]
+    x = 0
+    y = 1
+    chest = person[1]
+
+    feat = [chest[x]/width, chest[y]/height]
+    return np.array(feat)
+
 def keypointsToCommand(keypoints):
     if len(keypoints.shape) == 0:
         return "none"
@@ -63,11 +78,13 @@ if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-vdir', help='directory to for videos')
-    parser.add_argument('-dir', help='directory to save the features')
+    parser.add_argument('-dir', help='directory to save the keypoint features')
+    parser.add_argument('-ldir', help='directory to save the location features')
 
     args = parser.parse_args()
     feat_dir = args.dir
     video_dir = args.vdir
+    loc_dir = args.ldir
     
     teleop_only = "teleop" in feat_dir
 
@@ -90,57 +107,73 @@ if __name__ == "__main__":
     opWrapper.configure(params)
     opWrapper.start()
     
-    videos = os.listdir(video_dir)
-    for video in videos:
-        path = video_dir + "/" + video
-        print("Using video as input from path", path)
-        cap = cv2.VideoCapture(path)
-        out_f = "feat_out/" + video
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(out_f, fourcc, 30.0/3, (int(cap.get(3)), int(cap.get(4))))
+    # Expects directory of class directories of videos
+    classes = os.listdir(video_dir)
+    for c in classes:
+        videos = os.listdir(video_dir + '/' + c)
 
-        frames = 0
-        success = True
-        written = 0
-        
-        while success:
-            success, img = cap.read()
-            if not success:
-                break
-            frames += 1
-            # Run on every frame to improve accuracy
-            datum = op.Datum()
-            datum.cvInputData = img
-            opWrapper.emplaceAndPop([datum])
-            img = datum.cvOutputData
-            # Save as feat only on 3th frame
-            if frames % 3 == 0:
-                img = np.array(img, dtype=np.uint8)
-                keypoints = datum.poseKeypoints
-                #command = keypointsToCommand(datum.poseKeypoints)
+        fwrite = open(feat_dir + "/" + c, 'a')
+        fwrite_loc = open(loc_dir + "/" + c, 'a')
 
-                #white = (255, 255, 255) 
+        for video in videos:
+            path = video_dir + "/" + c + "/" + video
+            print("Using video as input from path", path)
+            cap = cv2.VideoCapture(path)
+            out_f = "feat_out/" + c + '_' + video
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(out_f, fourcc, 30.0/3, (int(cap.get(3)), int(cap.get(4))))
 
-                #font = cv2.FONT_HERSHEY_SIMPLEX
-                #cv2.putText(img, str(command), (20, 20), font, .5, white, 1, cv2.LINE_AA)
-                out.write(img)    
-
-                # For teleop only, ust follow teleop heuristic
-                #if teleop_only and not "teleop" in command:
-                #    continue
-
-                feat = getKeyPointsFeat(keypoints)
-
-                if feat is None:
-                    continue
-
-                fwrite = open(feat_dir + "/" + video.replace(".mp4", ""), 'a')
-                line = str(feat[0])
-                for m in range(1, feat.shape[0]):
-                    line += ";" + str(feat[m])
-                line += "\n"
-                fwrite.write(line)
-                fwrite.close()
-                written += 1
-                print("written", written, "frame", frames, end="\r")
+            frames = 0
+            success = True
+            written = 0
             
+            while success:
+                success, img = cap.read()
+                if not success:
+                    break
+                frames += 1
+                # Run on every frame to improve accuracy
+                datum = op.Datum()
+                datum.cvInputData = img
+                opWrapper.emplaceAndPop([datum])
+                img = datum.cvOutputData
+                # Save as feat only on 3th frame
+                if frames % 3 == 0:
+                    img = np.array(img, dtype=np.uint8)
+                    keypoints = datum.poseKeypoints
+                    #command = keypointsToCommand(datum.poseKeypoints)
+
+                    #white = (255, 255, 255) 
+
+                    #font = cv2.FONT_HERSHEY_SIMPLEX
+                    #cv2.putText(img, str(command), (20, 20), font, .5, white, 1, cv2.LINE_AA)
+                    out.write(img)    
+
+                    # For teleop only, ust follow teleop heuristic
+                    #if teleop_only and not "teleop" in command:
+                    #    continue
+
+                    feat = getKeyPointsFeat(keypoints)
+                    loc = getKeyPointsLocationFeat(keypoints, img.shape)
+
+                    if feat is None:
+                        continue
+
+                    line = str(feat[0])
+                    for m in range(1, feat.shape[0]):
+                        line += ";" + str(feat[m])
+                    line += "\n"
+                    fwrite.write(line)
+
+                    feat = loc
+                    line = str(feat[0])
+                    for m in range(1, feat.shape[0]):
+                        line += ";" + str(feat[m])
+                    line += "\n"
+                    fwrite_loc.write(line)
+
+                    written += 1
+                    print("written", written, "frame", frames, end="\r")
+        fwrite.close()
+        fwrite_loc.close()
+                
