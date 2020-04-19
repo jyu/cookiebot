@@ -7,7 +7,7 @@ from websocket import create_connection
 import argparse
 import pickle
 from sklearn import preprocessing
-from get_camera_feat import getKeyPointsFeat
+from get_video_feat import getKeyPointsFeat, getKeyPointsLocationFeat
 import os
 
 import tensorflow as tf
@@ -91,7 +91,7 @@ def isConfidentAboutArm(res, confidence_threshold, side):
         )
     return False
 
-def keypointsToPosition(keypoints):
+def keypointsToPosition(keypoints, img_shape):
     if len(keypoints.shape) == 0:
         return ""
     feat = getKeyPointsFeat(keypoints)
@@ -100,7 +100,10 @@ def keypointsToPosition(keypoints):
     feat = preprocessing.scale(feat)
     feat = feat.reshape(1, -1)
 
-    out = point_nn.predict(feat)
+    loc = getKeyPointsLocationFeat(keypoints, img_shape)
+    loc = loc.reshape(1, -1)
+
+    out = point_nn.predict([feat, loc])
     out_x = int(round(out[0][0][0]))
     out_y = int(round(out[1][0][0]))
     x = classes_x[out_x]
@@ -248,7 +251,7 @@ while success:
     img = datum.cvOutputData
     img = np.array(img, dtype=np.uint8)
     command = keypointsToCommand(datum.poseKeypoints)
-    pos = keypointsToPosition(datum.poseKeypoints)
+    pos = keypointsToPosition(datum.poseKeypoints, img.shape)
     teleop = keypointsToTeleop(datum.poseKeypoints)
 
     if "teleop" in command:
