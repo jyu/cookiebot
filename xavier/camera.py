@@ -11,7 +11,6 @@ from get_camera_feat import getKeyPointsFeat
 import os
 
 import tensorflow as tf
-#import keras
 from tensorflow.keras.models import load_model
 
 my_devices = tf.config.experimental.list_physical_devices(device_type='CPU')
@@ -35,18 +34,10 @@ if use_server:
 
 # Location of SVM
 teleop_svm = pickle.load(open("prod_models/teleop.svm", "rb"))
-point_nn = load_model("models/categorical_point_nn_mt.h5")
+point_nn = load_model("models/reg_point_nn.h5")
 point_classes = os.listdir("point_data")
-# Point SVM
-"""
-point_svms = {}
-for m in os.listdir("models"):
-    if not "point" in m:
-        continue    
-
-    i = int(m.replace("point_", "").replace(".svm",""))
-    point_svms[i] = pickle.load(open("models/" + m, "rb"))
-"""    
+classes_x = [-2, -1, 0, 1, 2]
+classes_y = [0, 1, 2]
 
 # Location of OpenPose python binaries
 openpose_path = "../../openpose"
@@ -110,24 +101,14 @@ def keypointsToPosition(keypoints):
     feat = feat.reshape(1, -1)
 
     out = point_nn.predict(feat)
-    out_x = np.argmax(out[0])
-    out_y = np.argmax(out[1])
-    x = [-2, -1, 0, 1, 2][out_x]
-    y = [0, 1, 2][out_y]
+    out_x = int(round(out[0][0][0]))
+    out_y = int(round(out[1][0][0]))
+    x = classes_x[out_x]
+    y = classes_y[out_y]
     """
     # Categorical NN
     out = point_nn.predict(feat)[0]
     point_class = point_classes[np.argmax(out)]
-
-    # SVM
-    max_i_pred = (-1, -1)
-    for m in point_svms.keys():
-        point_svm = point_svms[m]
-        pred = point_svm.predict(feat)
-        if max_i_pred[0] == -1 or pred > max_i_pred[1]:
-            max_i_pred = (m, pred)
-
-    point_class = point_classes[max_i_pred[0]]
 
     # Post processing 
     point_class = point_class.split("_")
