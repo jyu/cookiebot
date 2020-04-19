@@ -106,6 +106,13 @@ if __name__ == "__main__":
     opWrapper = op.WrapperPython()
     opWrapper.configure(params)
     opWrapper.start()
+
+    # Log files for which features have been extracted from
+    log = open('log.txt', 'r')
+    completed = list(log.readlines())
+    completed = list(map(lambda x: x.replace('\n', ''), completed))
+    log.close()
+    log = open('log.txt', 'a')
     
     # Expects directory of class directories of videos
     classes = os.listdir(video_dir)
@@ -117,7 +124,11 @@ if __name__ == "__main__":
 
         for video in videos:
             path = video_dir + "/" + c + "/" + video
+            if path in completed:
+                continue
             print("Using video as input from path", path)
+            log.write(path + '\n')
+
             cap = cv2.VideoCapture(path)
             out_f = "feat_out/" + c + '_' + video
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -176,4 +187,3 @@ if __name__ == "__main__":
                     print("written", written, "frame", frames, end="\r")
         fwrite.close()
         fwrite_loc.close()
-                
