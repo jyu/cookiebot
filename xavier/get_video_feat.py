@@ -7,6 +7,25 @@ from websocket import create_connection
 import argparse
 import os
 
+def getKeyPointsNewFeat(keypoints):
+    if len(keypoints.shape) == 0:
+        return None
+    person = keypoints[0]
+    x = 0
+    y = 1
+    chest = person[1]
+
+    # Part indicies
+    # R shoulder, R elbow, R wrist, L shoulder, L elbow, L wrist
+    parts = [2,3,4,5,6,7]
+    
+    feat = []
+    for p in parts:
+        feat.append(chest[x] - person[p][x]) 
+        feat.append(chest[y] - person[p][y])
+
+    return np.array(feat)
+
 def getKeyPointsFeat(keypoints):
     if len(keypoints.shape) == 0:
         return None
@@ -164,7 +183,7 @@ if __name__ == "__main__":
                     #if teleop_only and not "teleop" in command:
                     #    continue
 
-                    feat = getKeyPointsFeat(keypoints)
+                    feat = getKeyPointsNewFeat(keypoints)
                     loc = getKeyPointsLocationFeat(keypoints, img.shape)
 
                     if feat is None:
