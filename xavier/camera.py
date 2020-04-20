@@ -34,7 +34,7 @@ if use_server:
 
 # Location of SVM
 teleop_svm = pickle.load(open("prod_models/teleop.svm", "rb"))
-point_nn = load_model("models/reg_point_nn.h5")
+point_nn = load_model("prod_models/loc_reg_point_nn.h5")
 point_classes = os.listdir("point_data")
 classes_x = [-2, -1, 0, 1, 2]
 classes_y = [0, 1, 2]
