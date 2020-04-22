@@ -7,7 +7,7 @@ from websocket import create_connection
 import argparse
 import pickle
 from sklearn import preprocessing
-from get_video_feat import getKeyPointsFeat, getKeyPointsLocationFeat
+from get_video_feat import getKeyPointsFeat, getKeyPointsNewFeat, getKeyPointsLocationFeat
 import os
 
 import tensorflow as tf
@@ -34,7 +34,8 @@ if use_server:
 
 # Location of SVM
 teleop_svm = pickle.load(open("prod_models/teleop.svm", "rb"))
-point_nn = load_model("prod_models/loc_reg_point_nn.h5")
+#point_nn = load_model("prod_models/loc_reg_point_nn.h5")
+point_nn = load_model("prod_models/loc_reg_point_nn_2.h5")
 point_classes = os.listdir("point_data")
 classes_x = [-2, -1, 0, 1, 2]
 classes_y = [0, 1, 2]
@@ -94,7 +95,7 @@ def isConfidentAboutArm(res, confidence_threshold, side):
 def keypointsToPosition(keypoints, img_shape):
     if len(keypoints.shape) == 0:
         return ""
-    feat = getKeyPointsFeat(keypoints)
+    feat = getKeyPointsNewFeat(keypoints)
     if np.sum(feat) == 0:
         return ""
     feat = preprocessing.scale(feat)
@@ -106,6 +107,8 @@ def keypointsToPosition(keypoints, img_shape):
     out = point_nn.predict([feat, loc])
     out_x = int(round(out[0][0][0]))
     out_y = int(round(out[1][0][0]))
+    out_x = min(len(classes_x) - 1, out_x)
+    out_y = min(len(classes_y) - 1, out_y)
     x = classes_x[out_x]
     y = classes_y[out_y]
     """
@@ -361,7 +364,7 @@ while success:
                 )
 
                 # Location of point
-                if j == pos[1] and i == 4 - (pos[0] + 2):
+                if pos != "" and j == pos[1] and i == 4 - (pos[0] + 2):
                     cv2.rectangle(
                         img, 
                         (x_start + size * i, y_start + size * j), 
