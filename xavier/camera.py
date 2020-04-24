@@ -9,6 +9,7 @@ import pickle
 from sklearn import preprocessing
 from get_video_feat import getKeyPointsFeat, getKeyPointsNewFeat, getKeyPointsLocationFeat
 import os
+import math
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -34,7 +35,6 @@ if use_server:
 
 # Location of SVM
 teleop_svm = pickle.load(open("prod_models/teleop.svm", "rb"))
-#point_nn = load_model("prod_models/loc_reg_point_nn.h5")
 point_nn = load_model("prod_models/loc_reg_point_nn_2.h5")
 point_classes = os.listdir("point_data")
 classes_x = [-2, -1, 0, 1, 2]
@@ -75,6 +75,10 @@ if display:
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
     cv2.resizeWindow('image', 900, 1000)
 
+# Point info
+last_point_keypoints = None
+is_point_primed = False
+last_pos_command = (0,0)
 
 def isConfidentAboutArm(res, confidence_threshold, side):
     conf = 2
@@ -105,29 +109,34 @@ def keypointsToPosition(keypoints, img_shape):
     loc = loc.reshape(1, -1)
 
     out = point_nn.predict([feat, loc])
+    # Transform NN indices to classes
     out_x = int(round(out[0][0][0]))
     out_y = int(round(out[1][0][0]))
     out_x = min(len(classes_x) - 1, out_x)
     out_y = min(len(classes_y) - 1, out_y)
     x = classes_x[out_x]
     y = classes_y[out_y]
-    """
-    # Categorical NN
-    out = point_nn.predict(feat)[0]
-    point_class = point_classes[np.argmax(out)]
-
-    # Post processing 
-    point_class = point_class.split("_")
-    x = point_class[1]
-    # n1 means negative 1
-    if "n" in x:
-        x = -1 * int(x[1:])
-    else:
-        x = int(x)
-    
-    y = int(point_class[2])
-    """
     return (x,y)
+
+def ifPointPrimed(keypoints):
+    if len(keypoints.shape) == 0:
+        return False
+    person = keypoints[0]
+    x = 0
+    y = 1
+
+    r_elbow = person[3]
+    r_wrist = person[4]
+    l_elbow = person[6]
+    l_wrist = person[7]
+    
+    r_point_dist = math.sqrt((l_elbow[x] - r_wrist[x]) ** 2 + (l_elbow[y] -
+            r_wrist[y]) ** 2)
+    l_point_dist = math.sqrt((r_elbow[x] - l_wrist[x]) ** 2 + (r_elbow[y] -
+            l_wrist[y]) ** 2)
+
+    threshold = 40
+    return (r_point_dist < threshold) or (l_point_dist < threshold)
 
 def keypointsToTeleop(keypoints):
     if len(keypoints.shape) == 0:
@@ -141,7 +150,7 @@ def keypointsToTeleop(keypoints):
     commands = ["teleop_left", "teleop_straight", "teleop_right"]
     return commands[svm_res[0]]
 
-def keypointsToCommand(keypoints):
+def keypointsToCommand(keypoints, img_shape):
     if len(keypoints.shape) == 0:
         return "none"
     person = keypoints[0]
@@ -179,17 +188,21 @@ def keypointsToCommand(keypoints):
 
     # Teleop    
     teleop_mode = False
-    delta_tolerance = 30
 
     # Teleop mode: when right elbow is raised, and wrist is not too high above
     # elbow
+    delta_tolerance = 30
     if (abs(res["r_elbow"][y] - res["r_shoulder"][y]) < delta_tolerance and
         abs(res["r_wrist"][y] - res["r_elbow"][y]) < delta_tolerance * 2):
 
         teleop_mode = True
 
+        # SVM MODEL METHOD
+        teleop_command = keypointsToTeleop(keypoints)
+
         # NO MODEL METHOD
         # Check flip, user turned around
+        """
         flip = False
         if res["r_shoulder"][x] - res["l_shoulder"][x] > 0:
             flip = True
@@ -204,8 +217,30 @@ def keypointsToCommand(keypoints):
                 teleop_command = "teleop_right"
         else:
             teleop_command = "teleop_straight"
-        
-        
+       """ 
+    
+    # Point
+    point_mode = False
+    global is_point_primed
+    global last_point_keypoints
+    new_point_primed = ifPointPrimed(keypoints)
+    if new_point_primed:
+        last_point_keypoints = keypoints
+    else:
+        # Last frame primed, now we are not primed, a point was triggered
+        if is_point_primed and not last_point_keypoints is None:
+            pos = keypointsToPosition(last_point_keypoints, img_shape)
+            if pos != "":
+                point_mode = True
+                point_command = 'point_' + str(pos[0]) + '_' + str(pos[1])
+
+    is_point_primed = new_point_primed
+    
+    # Final output
+    if is_point_primed:
+        return "point_ready"
+    if point_mode:
+        return point_command
     if right_hand_raised and left_hand_raised:
         return "stop"
     if right_hand_raised:
@@ -253,15 +288,11 @@ while success:
     opWrapper.emplaceAndPop([datum])
     img = datum.cvOutputData
     img = np.array(img, dtype=np.uint8)
-    command = keypointsToCommand(datum.poseKeypoints)
-    pos = keypointsToPosition(datum.poseKeypoints, img.shape)
-    teleop = keypointsToTeleop(datum.poseKeypoints)
+    command = keypointsToCommand(datum.poseKeypoints, img.shape)
 
-    if "teleop" in command:
-        command = teleop
-    
-    is_other_command = command != "none" and not "teleop" in command
-    is_none_command = command == "none"
+    # Last command processing
+    is_other_command = command != "point_ready" and command != "none" and not "teleop" in command
+    is_none_command = command == "none" or command == "point_ready"
     is_teleop_command = "teleop" in command
     
     #print(command, frames)
@@ -282,6 +313,10 @@ while success:
     if command != last_command:
         # For non teleop commands, we want to transition from none
         if is_other_command and last_command_sent == "none":
+            use_command = True
+        if is_other_command and "stop" in command and last_command_sent in ["to_me", "go_home"]:
+            use_command = True
+        if is_other_command and "point" in command and last_command_sent == "point_ready":
             use_command = True
 
         # Smooth out none commands or teleop commands 
@@ -329,26 +364,20 @@ while success:
             (0,0,0),
             thickness=-1
         )
-        displayText(img, str(fps) + " FPS", (20,380))
-        displayText(img, str(ms) + " ms per frame", (20,400))
-        displayText(img, "Heuristics: " + str(command), (20, 420))
-        displayText(img, "Model: " + str(teleop), (20, 440))
-        displayText(img, "Last sent: " + last_command_sent + " " +
-                last_command_time, (20, 460))
-        # Top right
         """
+        # Top right
         displayText(img, str(fps) + " FPS", (20,20))
         displayText(img, str(ms) + " ms per frame", (20,40))
-        displayText(img, "Heuristics: " + str(command), (20, 60))
-        """
-        displayText(img, "Model: " + str(teleop), (20, 80))
+        displayText(img, "Command: " + str(command), (20, 60))
         displayText(img, "Last sent: " + last_command_sent + " " +
-                last_command_time, (20, 100))
-        """        
-        # Position info
-        displayText(img, "Position: " + str(pos), (20, 100))
-        displayText(img, "User: Purple", (20, 120))
-        displayText(img, "Point: Red", (20, 140))
+                last_command_time, (20, 80))
+
+        # Point info
+        if 'point' in last_command_sent and 'ready' not in last_command_sent:
+            c = last_command_sent.split("_")
+            last_pos_command = (int(c[1]), int(c[2]))
+        
+        pos = last_pos_command
         for j in range(3):
             for i in range(5):
 

@@ -6,6 +6,7 @@ import cv2
 import socket
 import base64
 import sys
+import math
 
 from sklearn import preprocessing
 from get_video_feat import getKeyPointsFeat, getKeyPointsNewFeat, getKeyPointsLocationFeat
@@ -72,6 +73,26 @@ def keypointsToPosition(keypoints, img_shape):
     y = classes_y[out_y]
     return (x,y)
 
+def getPointTriggerDist(keypoints):
+    if len(keypoints.shape) == 0:
+        return None
+    person = keypoints[0]
+    x = 0
+    y = 1
+
+    r_elbow = person[3]
+    r_wrist = person[4]
+    l_elbow = person[6]
+    l_wrist = person[7]
+    
+    r_point_dist = math.sqrt((l_elbow[x] - r_wrist[x]) ** 2 + (l_elbow[y] -
+            r_wrist[y]) ** 2)
+    l_point_dist = math.sqrt((r_elbow[x] - l_wrist[x]) ** 2 + (r_elbow[y] -
+            l_wrist[y]) ** 2)
+
+
+    return round(r_point_dist), round(l_point_dist)
+
 async def image(ws, path):
     while True:
         jpg_as_text = await ws.recv()
@@ -83,7 +104,8 @@ async def image(ws, path):
         img = datum.cvOutputData
         pos = keypointsToPosition(datum.poseKeypoints, img.shape)
         #text = encode_img(img)
-        await ws.send(str(pos))
+        r_point_dist, l_point_dist = getPointTriggerDist(datum.poseKeypoints)
+        await ws.send(str(pos) + '_' + str(r_point_dist) + '_' + str(l_point_dist))
 
 
 host_name = socket.gethostbyname(socket.gethostname())
