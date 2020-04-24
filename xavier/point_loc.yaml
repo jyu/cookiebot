@@ -1,0 +1,5 @@
+model_path: models/loc_reg_point_nn.h5
+data_dir: point_data
+val_data_dir: point_val_data
+loc_dir: point_loc_data
+val_loc_dir: point_val_loc_data
