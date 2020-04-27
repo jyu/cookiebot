@@ -9,6 +9,7 @@ import math
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import json
+import time
 
 # find openpose library
 openpose_path = "../../../openpose"
@@ -268,8 +269,10 @@ def scan_video(video, opWrapper, mapping, map_file, sample_rate, points_file, vi
         map_template = cv2.imread(map_file)
 
     points_index = 0
+    times = []
     # frame_index is index + 1
     for frame_index in tqdm(range(1, num_frames + 1)):
+        start_time = time.time()
         success, frame = capture.read()
         # shouldnt happen
         if not success:
@@ -316,7 +319,11 @@ def scan_video(video, opWrapper, mapping, map_file, sample_rate, points_file, vi
             if display:
                 cv2.imshow("Frame", frame)
                 cv2.waitKey(1)
+        if frame_index > 100:
+            times.append(time.time() - start_time)
     print("")
+    print(np.median(times))
+    print(np.max(times))
     return positions
 
 
@@ -340,7 +347,7 @@ def build_mapping(video, coords_file, mapping_figure):
             break
         # check if this frame is selected
         if frame_index == frame_indices[next_frame]:
-            x, y, _, _ = find_robot(frame)
+            [x, y], _, _ = find_robot(frame)
             x, y = check_coords(x, y)
             if x and y:
                 frame_coords.append([x, y])
@@ -356,23 +363,31 @@ def build_mapping(video, coords_file, mapping_figure):
     # test mapping on image coords and store results
     if mapping_figure:
         test_coords = []
-        for coord in image_coords:
+        drift = []
+        for i in range(len(image_coords)):
+            coord = image_coords[i]
             np_coord = np.float32([[[coord[0], coord[1]]]])
-            test_coords.append(cv2.perspectiveTransform(np_coord, mapping).ravel())
+            test_coord = cv2.perspectiveTransform(np_coord, mapping).ravel()
+            test_coords.append(test_coord)
+            diff = test_coord - map_coords[i]
+            drift.append(np.sqrt(diff[0] ** 2 + diff[1] ** 2))
         test_coords = np.asarray(test_coords)
 
         # plot and save comparison
-        plt.subplot(1, 3, 1)
+        plt.subplot(2, 2, 1)
         plt.title("Image Coords")
         plt.scatter(image_coords[:, 0], image_coords[:, 1])
-        plt.subplot(1, 3, 2)
+        plt.subplot(2, 2, 2)
         plt.title("Map Coords")
         plt.scatter(map_coords[:, 0], map_coords[:, 1])
-        plt.subplot(1, 3, 3)
+        plt.subplot(2, 2, 3)
         plt.title("Estimated Map Coords")
         plt.scatter(test_coords[:, 0], test_coords[:, 1])
+        plt.subplot(2, 2, 4)
+        plt.title("Mapping Drift")
+        plt.plot(drift)
         plt.savefig(mapping_figure)
-
+        print("Average Drift: ", round(np.median(drift), 2), "mm", sep="")
     return mapping
 
 if __name__ == "__main__":
