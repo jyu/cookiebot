@@ -277,18 +277,37 @@ gesture_buffer = 10
 new_command = "none"
 new_command_count = 0
 
+start_perf_time = time.time()
 success, img = cap.read()
 frames = 1
 print(img.shape)
 
+warmup = False
+times_detected = []
+
 while success:
     start_time = time.time()
+
+    camera_time = time.time()
+
     datum = op.Datum()
     datum.cvInputData = img
     opWrapper.emplaceAndPop([datum])
     img = datum.cvOutputData
     img = np.array(img, dtype=np.uint8)
+
+    open_pose_time = time.time()
+
     command = keypointsToCommand(datum.poseKeypoints, img.shape)
+
+    classification_time = time.time()
+
+    # We want to start the TF warmup period asap
+    if not warmup:
+        pos = keypointsToPosition(datum.poseKeypoints, img.shape)
+        if pos != "":
+            print("Warm up done", pos)
+            warmup = True
 
     # Last command processing
     is_other_command = command != "point_ready" and command != "none" and not "teleop" in command
@@ -318,6 +337,8 @@ while success:
             use_command = True
         if is_other_command and "point" in command and last_command_sent == "point_ready":
             use_command = True
+        if is_other_command and "point" in command and last_command_sent != "point_ready":
+            use_command = False
 
         # Smooth out none commands or teleop commands 
         new_command = command
@@ -338,7 +359,21 @@ while success:
         timestamp = framesToTimestamp(frames)
         last_command_sent = command
         last_command_time = timestamp
-        print("sent command", command.ljust(12), "timestamp", timestamp)
+        print("sent command:", command.ljust(12), "timestamp", timestamp)
+
+        time_detected = time.time()
+        print("time detected:", time_detected - start_perf_time)
+
+        sequence_time = time.time()
+        print("Time breakdown")
+        print("Camera time:", camera_time - start_perf_time)
+        print("OpenPose time:", open_pose_time - camera_time)
+        print("Classificaiton time:", classification_time - open_pose_time)
+        print("Sequence time:", sequence_time - classification_time)
+
+        times_detected.append(time_detected - start_perf_time)
+        print("Average time detected", sum(times_detected) / len(times_detected),
+                "Total detected:", len(times_detected))
 
     last_command = command
 
@@ -417,7 +452,8 @@ while success:
         else:    
             cv2.imshow('image',img)
             cv2.waitKey(1)
-
+    
+    start_perf_time = time.time()
     # Prepare next frame
     success, img = cap.read()
     frames += 1
