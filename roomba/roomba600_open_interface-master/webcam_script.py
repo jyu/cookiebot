@@ -28,9 +28,9 @@ def capture():
 
   # Out file, defaults to video.mp4
   # name = args.name
-  name = "HumanRobotInteraction.mp4"
+  name = "lawn_3.mp4"
   # wait_time = int(args.wait)
-  wait_time = 10
+  wait_time = 0
   # total_time = int(args.length) + wait_time
   # if (int(args.length) <= 0):
   #   total_time = math.inf
@@ -49,13 +49,13 @@ def capture():
     waiting = True
 
   while True:
-    print("initiate capturing")
+    # print("initiate capturing")
     success, frame = cap.read()
-    curr = time.time()
-    elapsed = round(curr - start, 2)
+    # curr = time.time()
+    # elapsed = round(curr - start, 2)
     
     if waiting:
-      print("waiting")
+      # print("waiting")
       # end = time.time()
       # elapsed = round(end - start, 2)
       black = (0,0,0)
@@ -67,12 +67,12 @@ def capture():
     # elif total_time < elapsed:
     #   break
     else:
-      print()
+      print("capturing")
       out.write(frame)
     # cv2.imshow('frame', frame)
     # Press q to exit
     # if cv2.waitKey(1) & 0xFF == ord('q'):
-    if keyboard.is_pressed("q"):
+    if keyboard.is_pressed("esc"):
       break
   print("cap ended")
   cap.release()
@@ -80,14 +80,15 @@ def capture():
   return
 
 def main():
-  # cap_begun = False
-  # while True:
-  #   if keyboard.is_pressed("c") and cap_begun is False:
-  #     print("cap begun")
-  #     cap_begun = True
-  #     capture()
-  #     return
-  # video = cv2.VideoCapture('MoveItMoveIt.mp4') 
+  cap_begun = False
+  while True:
+    if keyboard.is_pressed("c") and cap_begun is False:
+      time.sleep(5)
+      print("cap begun")
+      cap_begun = True
+      capture()
+      return
+  # video = cv2.VideoCapture('NewVideo.mp4') 
   # total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT)) + 1
   # black = (0,0,0)
   # font = cv2.FONT_HERSHEY_SIMPLEX
@@ -98,15 +99,18 @@ def main():
   # out = cv2.VideoWriter("result.mp4", fourcc, 30.0, (width, height))
 
   # count = 0
-  # with open("test.txt") as f:
-  #   # for line in f:
-  #   line = f.readline()
-  #   while line:
-  #     # print(line)
-  #     if count > 75:
-  #       coord_list = np.append(coord_list, line)
-  #     line = f.readline()
-  #     count+=1
+  # with open("x_arr.txt") as fx:
+  #   with open("y_arr.txt") as fy:
+  #     # for line in f:
+  #     linex = fx.readline()
+  #     liney = fy.readline()
+  #     while linex:
+  #       # print(line)
+  #       if count > 75:
+  #         coord_list = np.append(coord_list, "x:"+str(linex)+" y:"+str(liney))
+  #       linex = fx.readline()
+  #       liney = fy.readline()
+  #       count+=1
 
   # length = np.size(coord_list)
   # # length = count
@@ -128,8 +132,8 @@ def main():
   #   success, frame = video.read()
   # video.release()
   # out.release()
-  capture()
-  return
+  # # capture()
+  # return
   
 if __name__ == "__main__":
     main()
