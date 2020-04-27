@@ -194,9 +194,9 @@ class Node:
     def __init__(self, cell_x, cell_y):
         self.cell_x = cell_x
         self.cell_y = cell_y
-        self.f = 0
-        self.g = sys.maxsize
-        self.h = 0
+        self.f = 0.0
+        self.g = 1000000.0 #sys.maxsize
+        self.h = 0.0
         self.parent = None
     def __eq__(self, other):
         return (self.__class__ == other.__class__ and self.cell_x == other.cell_x and self.cell_y == other.cell_y)
@@ -231,7 +231,7 @@ def find_path(goal):
     open_list = []
     closed_list = []
     initial_node = Node(curr_cell_x, curr_cell_y)
-    initial_node.g = 0
+    initial_node.g = 0.0
     open_list.append(initial_node)
     curr_node = initial_node
     count = 0
@@ -262,11 +262,11 @@ def find_path(goal):
                             # open_list.remove(newNode)
                         if (newNode not in closed_list):
                             if (newNode.g > curr_node.g + map[curr_node.cell_y+i, curr_node.cell_x+j]):
-                                newNode.g = curr_node.g + map[curr_node.cell_y+i, curr_node.cell_x+j] + 1 #math.sqrt(i**2 + j**2) #abs(i) + abs(j)
+                                newNode.g = curr_node.g + map[curr_node.cell_y+i, curr_node.cell_x+j] + max(abs(i), abs(j)) + 0.4*min(abs(i), abs(j)) #math.sqrt(i**2 + j**2) #abs(i) + abs(j)
                                 newNode.parent = curr_node
-                                h_new = 0
-                                h_new += abs(goal_cell_x - (curr_node.cell_x+j))
-                                h_new += abs(goal_cell_y - (curr_node.cell_y+i))
+                                h_new = 0.0
+                                h_new += max(abs(goal_cell_x - (curr_node.cell_x+j)), abs(goal_cell_y - (curr_node.cell_y+i)))
+                                # h_new += abs(goal_cell_y - (curr_node.cell_y+i))
                                 newNode.h = h_new
                                 newNode.f = newNode.g + newNode.h
                                 newNode.parent = curr_node
